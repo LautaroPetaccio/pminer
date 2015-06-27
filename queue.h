@@ -1,4 +1,5 @@
-#ifndef QUEUE
+#ifndef _QUEUE_H
+#define _QUEUE_H
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -16,5 +17,4 @@ size_t queue_pop(struct connection_buffer *cb, char **message, char delimiter);
 size_t queue_free_size(struct connection_buffer *cb);
 int queue_push(struct connection_buffer *cb, char *message, size_t size);
 
-#define QUEUE
-#endif
+#endif /* endif.h */
