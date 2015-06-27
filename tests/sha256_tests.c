@@ -5,7 +5,7 @@
 #include <setjmp.h>
 #include <cmocka.h>
 #include <string.h>
-#include "sha256.h"
+#include "../sha256.h"
 
 extern void* _test_malloc(const size_t size, const char* file, const int line);
 extern void* _test_calloc(const size_t number_of_elements, const size_t size,
