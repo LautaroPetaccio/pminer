@@ -1,6 +1,5 @@
 #include <stdio.h>
 #include <jansson.h>
-#include "sha256-1.h"
 #include <stdbool.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -10,17 +9,10 @@
 #include <netinet/in.h>
 #include <netdb.h> 
 #include "queue.h"
+#include "sha256.h"
+#include "util.h"
 
 typedef enum {SUBS_SENT, AUTH_SENT, AUTHORIZED} stratum_state;
-
-static inline void le32enc(void *pp, uint32_t x)
-{
-	uint8_t *p = (uint8_t *)pp;
-	p[0] = x & 0xff;
-	p[1] = (x >> 8) & 0xff;
-	p[2] = (x >> 16) & 0xff;
-	p[3] = (x >> 24) & 0xff;
-}
 
 struct work {
 	uint32_t data[32];
@@ -69,90 +61,55 @@ char buffer[256];
 unsigned int id;
 unsigned int MAX_SEND_RETY = 4;
 
-void strrev(char *p) {
-  char *q = p;
-  while(q && *q) ++q;
-  for(--q; p < q; ++p, --q)
-    *p = *p ^ *q,
-    *q = *p ^ *q,
-    *p = *p ^ *q;
-}
-////////////////////////////////////////////////
-// Converts hex string from request to binary
-// Converts each two characters into long and stores them?
-///////////////////////////////////////////////
+void create_new_job(struct stratum_connection *connection, struct work* work) {
+	uint8_t merkle_root[65];
+	work->job_id = strdup(connection->job.job_id);
+	work->nonce2_len = connection->nonce2_size;
+	work->nonce2 = realloc(work->nonce2, connection->nonce2_size);
+	memcpy(work->nonce2, connection->job.nonce2, connection->nonce2_size);
 
-bool hex2bin(unsigned char *dest, const char *hexstr, size_t len) {
-	char hex_byte[3];
-	char *ep;
+	////////////////////////////////////////////////
+	//       Transaction header creation          //
+	////////////////////////////////////////////////
+	/*
+	   Version         4 bytes
+	   hashPrevBlock  32 bytes
+	   hashMerkleRoot 32 bytes
+	   Time            4 bytes
+	   Bits            4 bytes
+	   Nonce           4 bytes
+	*/
 
-	hex_byte[2] = '\0';
-
-	while (*hexstr && len) {
-		if (!hexstr[1]) {
-			fprintf(stderr, "hex2bin str truncated\n");
-			return false;
-		}
-		hex_byte[0] = hexstr[0];
-		hex_byte[1] = hexstr[1];
-		*dest = (unsigned char) strtol(hex_byte, &ep, 16);
-		if (*ep) {
-			fprintf(stderr, "hex2bin failed on %s\n", hex_byte);
-			return false;
-		}
-		dest++;
-		hexstr += 2;
-		len--;
+	/* Generates merkle root */
+	sha256d(connection->job.coinbase, connection->job.coinbase_size, merkle_root);
+	for(int i = 0; i < connection->job.merkle_count; i++) {
+		memcpy(merkle_root + 32, connection->job.merkle[i], 32);
+		sha256d(merkle_root, 64, merkle_root);
 	}
+	/* Increment extranonce2 ??????*/
+	for (int i = 0; i < connection->nonce2_size && !++connection->job.nonce2[i]; i++);
 
-	return (len == 0 && *hexstr == 0) ? true : false;
-}
+	/* Assemble block header */
+	memset(work->data, 0, 128);
+	/* Version */
+	work->data[0] = swap_uint32(*((uint32_t *) connection->job.version));
+	/* hashPrevBlock */
+	for(int i = 0; i < 8; i++)
+		work->data[1 + i] = swap_uint32(*((uint32_t *) connection->job.prevhash + i));
+	/* hashMerkleRoot */
+	for(int i = 0; i < 8; i++)
+		work->data[9 + i] = swap_uint32(*((uint32_t *) merkle_root + i));
 
-////////////////////////////////////////////////
-//       Converts binary to hex string        //
-////////////////////////////////////////////////
-
-void bin2hex(char *s, const unsigned char *p, size_t len) {
-	int i;
-	for (i = 0; i < len; i++)
-		sprintf(s + (i * 2), "%02x", (unsigned int) p[i]);
-}
-
-void create_new_job() {
-	// unsigned int job = atoi(block.job_id);
-	// char job_string[4] = (char *) job;
-	// long block_time = 0x53058b35;
-	// unsigned int bits = 0x19015f53;
-	// long ver = 2;
-	// char prev_block[] = "000000000000000117c80378b8da0e33559b5997f2ad55e2f7d18ec1975b9717";
-	// char mrkl_root []= "871714dcbae6c8193a2bb9b2a69fe1c0440399f38d94b3a0f1b447275a29978a";
-	// unsigned int exp = bits >> 24;
-	// unsigned int mant = bits & 0xffffff;
-	// char target_hexstr[64];
-	// printf("Aca llego \n");
-	// //sprintf(target_hexstr, "%064x",(mant * (1<<(8*(exp - 3)))));
-	// strrev(prev_block);
-	// strrev(mrkl_root);
-	// char *ver_char = (char *) &ver;
-	// printf("Ver \n");
-	// printf("%i %i %i %i \n", ver_char[0], ver_char[1], ver_char[2], ver_char[3]);
-	// char prev_block_bytes[64];
-	// memset(prev_block_bytes, 0);
-	// hex2bin(prev_block_bytes, prev_block, strlen(prev_block));
-	// for(int i = 0; i < 64; i++) {
-	// 	printf("%i ", prev_block_bytes[i]);
-	// }
-	// printf("\n");
-
-	// char res[32];
-	// sha256_context ctx;
-	// sha256_starts(&ctx);
-	// sha256_update(&ctx, (uint8 *) header, uint32 length );
-	// sha256_finish(&ctx, (uint8 *) res);
-
-	// sha256_starts(&ctx);
-	// sha256_update(&ctx, (uint8 *) header, uint32 length );
-	// sha256_finish(&ctx, (uint8 *) res);
+	/* Little endian Time */
+	work->data[17] = swap_uint32(*((uint32_t *) connection->job.ntime));
+	/* Little endian Bits */
+	work->data[18] = swap_uint32(*((uint32_t *) connection->job.nbits));
+	/* work->data[19]; Nonce */
+	/* Padding data, optimizing the transform */
+	/* Useful for the fpga miner */
+	work->data[20] = 0x80000000;
+	work->data[31] = 0x00000280;
+	//diff_to_target(work->target, connection->job.diff);
 
 }
 
@@ -293,8 +250,8 @@ void stratum_submit_share(struct stratum_connection *connection, struct work *wo
 	uint32_t ntime, nonce;
 	char time_string[9], nonce_string[9], nonce2_string[(connection->nonce2_size * 2) + 1];
 	// Converts to little endian?
-	le32enc(&ntime, work->data[17]);
-	le32enc(&nonce, work->data[19]);
+	//le32enc(&ntime, work->data[17]);
+	//le32enc(&nonce, work->data[19]);
 	bin2hex(time_string, (const unsigned char *) (&ntime), 4);
 	bin2hex(nonce_string, (const unsigned char *) (&nonce), 4);
 	bin2hex(nonce2_string,(const unsigned char *) (&work->nonce2), connection->nonce2_size);
@@ -426,6 +383,8 @@ int main(int argc, char *argv[]) {
 		argv[1], argv[2], argv[3], argv[4]);
 	int socket = sock(argv[1], argv[2]);
 	printf("Successfully connected \n");
+	/* Stratum work */
+	struct work work;
 	// Creates stratum connection structure
 	struct stratum_connection *connection = (struct stratum_connection*) malloc(sizeof(struct stratum_connection));
 	connection->socket = socket;
@@ -513,6 +472,7 @@ int main(int argc, char *argv[]) {
 				if(!strcmp(json_string_value(method), "mining.notify")) {
 					printf("Recibi un notify \n");
 					stratum_notify(connection, json_obj);
+					create_new_job(connection, &work);
 				}
 				else if(!strcmp(json_string_value(method), "mining.set_difficulty")) {
 					printf("Recibi un cambio de dificultad \n");

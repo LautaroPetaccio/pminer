@@ -1,4 +1,5 @@
 #include "sha256.h"
+#include "util.h"
 
 /* Macros used to compute the transform */
 #define Ch(x, y, z)     ((x & (y ^ z)) ^ z)
@@ -32,43 +33,6 @@ static uint8_t sha256_padding[64] = {
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 };
-
-/* Change uint64 endianess */
-static uint64_t swap_uint64(uint64_t val) {
-    val = ((val << 8) & 0xFF00FF00FF00FF00ULL ) | ((val >> 8) & 0x00FF00FF00FF00FFULL );
-    val = ((val << 16) & 0xFFFF0000FFFF0000ULL ) | ((val >> 16) & 0x0000FFFF0000FFFFULL );
-    return (val << 32) | (val >> 32);
-}
-
-/* Change uint32 endianess */
-static uint32_t swap_uint32(uint32_t val) {
-	return ((((val) << 24) & 0xff000000u) | (((val) << 8) & 0x00ff0000u) | (((val) >> 8) & 0x0000ff00u) | (((val) >> 24) & 0x000000ffu));
-}
-
-void byte_swap(unsigned char* data, int len) {
-        int c;
-        unsigned char tmp[len];
-       
-        c=0;
-        while(c<len)
-        {
-                tmp[c] = data[len-(c+1)];
-                c++;
-        }
-       
-        c=0;
-        while(c<len)
-        {
-                data[c] = tmp[c];
-                c++;
-        }
-}
-
-void bin2hex(char *s, const unsigned char *p, const size_t len) {
-	int i;
-	for (i = 0; i < len; i++)
-		sprintf(s + (i * 2), "%02x", (unsigned int) p[i]);
-}
 
 /* Initiate the sha256 state that will hold our binary hash */
 static void sha256_init(sha256_ctx *ctx) {
