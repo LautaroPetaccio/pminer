@@ -16,6 +16,20 @@ extern void _test_free(void* const ptr, const char* file, const int line);
 #define calloc(num, size) _test_calloc(num, size, __FILE__, __LINE__)
 #define free(ptr) _test_free(ptr, __FILE__, __LINE__)
 
+void reverse(char *s) {
+  char *end,temp;
+  end = s;
+  while(*end != '\0'){
+    end++;
+  }
+  end--;  //end points to last letter now
+  for(;s<end;s++,end--){
+    temp = *end;
+    *end = *s;
+    *s = temp; 
+  }
+}
+
 static void test_length_smaller_than_56(void **state) {
 	(void) state; /* unused */
 	char *data = "abc";
@@ -65,6 +79,17 @@ static void test_length_greater_than_64(void **state) {
 		"fcae0435ecabaebf770d9506763a6e3cd0aaab640ff0305312d91fd6979a2c99");
 }
 
+static void test_256d_little_endian(void **state) {
+	(void) state; /* unused */
+	/* 64 bytes */
+	char *data = "abc";
+	char hash[65];
+	sha256d_hash_le((uint8_t *) data, strlen(data), hash);
+	/* Converts result to little endian */
+	assert_string_equal(hash, 
+		"58636c3ec08c12d55aedda056d602d5bcca72d8df6a69b519b72d32dc2428b4f");
+}
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test(test_length_smaller_than_56),
@@ -72,6 +97,7 @@ int main(void) {
 		cmocka_unit_test(test_length_less_than_64),
 		cmocka_unit_test(test_length_equal_to_64),
 		cmocka_unit_test(test_length_greater_than_64),
+		cmocka_unit_test(test_256d_little_endian),
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);

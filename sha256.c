@@ -6,11 +6,12 @@
 #define ROTR(x, n)      ((x >> n) | (x << (32 - n)))
 #define S0(x)           (ROTR(x, 2) ^ ROTR(x, 13) ^ ROTR(x, 22))
 #define S1(x)           (ROTR(x, 6) ^ ROTR(x, 11) ^ ROTR(x, 25))
-#define T1()
 
 /* Extension macros */
 #define s0(x)           (ROTR(x, 7) ^ ROTR(x, 18) ^ (x >> 3))
 #define s1(x)           (ROTR(x, 17) ^ ROTR(x, 19) ^ (x >> 10))
+
+#define SHA256_LENGTH 32
 
 static const uint32_t k[64] = {
 	0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
@@ -32,20 +33,38 @@ static uint8_t sha256_padding[64] = {
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 };
 
-// Converts uint64 little endinan to uint64 big endian
+/* Change uint64 endianess */
 static uint64_t swap_uint64(uint64_t val) {
     val = ((val << 8) & 0xFF00FF00FF00FF00ULL ) | ((val >> 8) & 0x00FF00FF00FF00FFULL );
     val = ((val << 16) & 0xFFFF0000FFFF0000ULL ) | ((val >> 16) & 0x0000FFFF0000FFFFULL );
     return (val << 32) | (val >> 32);
 }
 
-// Converts uint64 little endinan to uint64 big endian
+/* Change uint32 endianess */
 static uint32_t swap_uint32(uint32_t val) {
 	return ((((val) << 24) & 0xff000000u) | (((val) << 8) & 0x00ff0000u) | (((val) >> 8) & 0x0000ff00u) | (((val) >> 24) & 0x000000ffu));
 }
 
+void byte_swap(unsigned char* data, int len) {
+        int c;
+        unsigned char tmp[len];
+       
+        c=0;
+        while(c<len)
+        {
+                tmp[c] = data[len-(c+1)];
+                c++;
+        }
+       
+        c=0;
+        while(c<len)
+        {
+                data[c] = tmp[c];
+                c++;
+        }
+}
 
-static void bin2hex(char *s, const unsigned char *p, const size_t len) {
+void bin2hex(char *s, const unsigned char *p, const size_t len) {
 	int i;
 	for (i = 0; i < len; i++)
 		sprintf(s + (i * 2), "%02x", (unsigned int) p[i]);
@@ -164,28 +183,44 @@ static void sha256(sha256_ctx *context, const uint8_t *data, const size_t length
 			sha256_transform(context);
 		}
 	}
-
+	/* Converts result to big endian */
 	for (int i = 0; i < 8; ++i) {
 		context->state[i] = swap_uint32(context->state[i]);
 	}
 
 }
 
-void sha256d_hash(const uint8_t *data, const size_t length, char *hash) {
+void sha256d(const uint8_t *data, const size_t length, uint8_t *hash) {
 	sha256_ctx first_context, second_context;
 	/* First hash */
 	sha256_init(&first_context);
 	sha256(&first_context, data, length);
 	/* Second hash */
 	sha256_init(&second_context);
-	sha256(&second_context, (uint8_t *) first_context.data, 32);
+	sha256(&second_context, (uint8_t *) first_context.state, SHA256_LENGTH);
+	memcpy(hash, second_context.state, SHA256_LENGTH);
+}
+
+void sha256d_hash_le(const uint8_t *data, const size_t length, char *hash) {
+	uint8_t raw_hashed[SHA256_LENGTH];
+	sha256d(data, length, raw_hashed);
+	/* Converts result to little endian */
+	byte_swap(raw_hashed, SHA256_LENGTH);
 	/* Creates hex hash */
-	bin2hex(hash, (uint8_t *) second_context.state, 32);
+	bin2hex(hash, raw_hashed, SHA256_LENGTH);
+}
+
+void sha256d_hash_be(const uint8_t *data, const size_t length, char *hash) {
+	uint8_t raw_hashed[SHA256_LENGTH];
+	sha256d(data, length, raw_hashed);
+	/* Creates hex hash */
+	bin2hex(hash, raw_hashed, SHA256_LENGTH);
 }
 
 void sha256_hash(const uint8_t *data, const size_t length, char *hash) {
 	sha256_ctx context;
 	sha256_init(&context);
 	sha256(&context, data, length);
-	bin2hex(hash, (uint8_t *) context.state, 32);
+
+	bin2hex(hash, (uint8_t *) context.state, SHA256_LENGTH);
 }
