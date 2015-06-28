@@ -188,9 +188,10 @@ void stratum_subscribe(struct stratum_connection *connection) {
 	json_object_set_new(root, "params", json_array());
 	char *res_string = json_dumps(root, JSON_ENCODE_ANY | JSON_PRESERVE_ORDER);
 	printf("String to be sent: \n%s\n", res_string);
+	size_t res_string_length = strlen(res_string);
 	//Converts endstring character to newline to be read by the stratum server
-	res_string[strlen(res_string)] = '\n';
-	send_data(connection->socket, res_string, strlen(res_string) + 1);
+	res_string[res_string_length] = '\n';
+	send_data(connection->socket, res_string, res_string_length + 1);
 	free(res_string);
 	json_decref(root);
 	connection->send_id++;
@@ -482,5 +483,8 @@ int main(int argc, char *argv[]) {
 			free(message);
 		}
 	}
+
+	queue_free(recv_queue);
+	close(connection->socket);
 	return 0;
 }
