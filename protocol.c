@@ -58,8 +58,24 @@ struct stratum_connection {
 };
 
 char buffer[256];
-unsigned int id;
-unsigned int MAX_SEND_RETY = 4;
+
+void create_stratum_connection(int socket) {
+	struct stratum_connection *connection = 
+		(struct stratum_connection*) malloc(sizeof(struct stratum_connection));
+	connection->user = NULL;
+	connection->subscription_id = NULL;
+	connection->notification_id = NULL;
+	connection->nonce1 = NULL;
+	connection->job.job_id = NULL;
+	connection->job.coinbase = NULL;
+	connection->job.nonce2 = NULL;
+	connection->job.merkle_root = NULL;
+	connection->job.merkle = NULL;
+	connection->state = SUBS_SENT;
+	connection->send_id = 1;
+	connection->socket = socket;
+	return connection;
+}
 
 void create_new_job(struct stratum_connection *connection, struct work* work) {
 	uint8_t merkle_root[65];
@@ -282,59 +298,70 @@ void stratum_submit_share(struct stratum_connection *connection, struct work *wo
 void  stratum_notify(struct stratum_connection *connection, json_t *json_obj) {
 	//json_t *id = json_object_get(json_obj, "id");
 	json_t *params = json_object_get(json_obj, "params");
-	// job_id - ID of the job. Use this ID while submitting share generated from this job.
-	json_t *job_id = json_array_get(params, 0);
-	connection->job.job_id = strdup(json_string_value(job_id));
-	printf("Checkpoint 1 \n");
-	printf("Job id collected: %s \n", connection->job.job_id);
 
-	// prevhash - Hash of previous block.
-	// VER SI LO NECESITO PARA ALGO
+	/* Stores prevhash - Hash of previous block. */
 	json_t *prev_hash = json_array_get(params, 1);
 	hex2bin(connection->job.prevhash, json_string_value(prev_hash), 32);
 	printf("Checkpoint 2 \n");
+
 	////////////////////////////////////////////////
 	// 			Start coinbase building			  //
 	////////////////////////////////////////////////
-	// coinb1 - Initial part of coinbase transaction.
+	/* coinb1 - Initial part of coinbase transaction. */
 	json_t *coinb1 = json_array_get(params, 2);
-	// coinb2 - Final part of coinbase transaction.
+	/* coinb2 - Final part of coinbase transaction. */
 	json_t *coinb2 = json_array_get(params, 3);
 	size_t coinb1_size = strlen(json_string_value(coinb1)) / 2;
 	size_t coinb2_size = strlen(json_string_value(coinb2)) / 2;
 	printf("Checkpoint 3 \n");
-	// Total coinbase size
+	/* Total coinbase size */
 	connection->job.coinbase_size = coinb1_size + connection->nonce1_size + 
 		connection->nonce2_size + coinb2_size;
+	/* Get memory for the coinbase */
 	connection->job.coinbase = realloc(connection->job.coinbase, connection->job.coinbase_size);
 	printf("Checkpoint 4 \n");
-	// Copies coinbase1 to the start of coinbase
+	/* Copies the first part of the coinbase (coinbase1) */
 	hex2bin(connection->job.coinbase, json_string_value(coinb1), coinb1_size);
 	printf("Checkpoint 5 \n");
-	// Copies the nonce1 next to the coinbase1
+	/* Copies the nonce1 next to the coinbase1 */
 	memcpy(connection->job.coinbase + coinb1_size, connection->nonce1, connection->nonce1_size);
 	printf("Checkpoint 6 \n");
-	// Sets the nonce2 pointer where it is in the coinbase array
+	/* Sets the nonce2 pointer where it is in the coinbase array */
 	connection->job.nonce2 = connection->job.coinbase + coinb1_size + connection->nonce1_size;
 	printf("Checkpoint 7 \n");
-	// Hace esto???
-	if (!connection->job.job_id || strcmp(connection->job.job_id, json_string_value(job_id)))
-		memset(connection->job.nonce2, 0, connection->nonce2_size);
-	printf("Checkpoint 8 \n");
-	// Copies the nonce2 to the coinbase
+
+	/* ID of the job - Used to submit shares */
+	json_t *job_id = json_array_get(params, 0);
+
+	/* If job_id changed or never setted, reset nonce2 */
+	if(!connection->job.job_id) {
+		if(strcmp(connection->job.job_id, json_string_value(job_id))) {
+			memset(connection->job.nonce2, 0, connection->nonce2_size);
+			free(connection->job.job_id);
+		}
+		/* Copies new job_id */
+		connection->job.job_id = strdup(json_string_value(job_id));
+		printf("Checkpoint 8 \n");
+		printf("Job id collected: %s \n", connection->job.job_id);
+	}
+
+	/* Copies the coinbase2 next to the nonce2 */
 	hex2bin(connection->job.nonce2 + connection->nonce2_size, 
 		json_string_value(coinb2), coinb2_size);
 	printf("Checkpoint 9 \n");
-	//
-	// merkle_branch - List of hashes, will be used for calculation of merkle root.
-	// This is not a list of all transactions, it only contains prepared hashes of steps of merkle tree algorithm.
+
+	/*
+		Stores hashes used to compute the merkle root
+	 	This is not a list of all transactions, it only contains
+	 		prepared hashes of steps of merkle tree algorithm.
+	*/
 	json_t *merkle_branch = json_array_get(params, 4);
 	connection->job.merkle_count = json_array_size(merkle_branch);
 	printf("Checkpoint 10 \n");
-	// Creates an array of pointers
+	/* Creates the array of pointers that will hold the hashes */
 	connection->job.merkle = realloc(connection->job.merkle, 
 		connection->job.merkle_count * sizeof(unsigned char *));
-	// For each merkle hash
+	/* For each merkle hash, store the hashes */
 	for(int i=0;i < connection->job.merkle_count; i++) {
 		connection->job.merkle[i] = malloc(sizeof(unsigned char) * 32);
 		json_t *merkle_hash = json_array_get(merkle_branch, i);
@@ -345,15 +372,15 @@ void  stratum_notify(struct stratum_connection *connection, json_t *json_obj) {
 	// 		   End coinbase building			  //
 	////////////////////////////////////////////////
 
-	// version - Bitcoin block version.
+	/* version - Bitcoin block version.*/
 	json_t *version = json_array_get(params, 5);
 	printf("Checkpoint 12 \n");
 	printf("Got version %s \n", json_string_value(version));
-	// nbits - Encoded current network difficulty
+	/* nbits - Encoded current network difficulty */
 	json_t *nbits = json_array_get(params, 6);
 	printf("Checkpoint 13 \n");
 	printf("Got nbits %s \n", json_string_value(nbits));
-	// ntime - Current ntime
+	/* ntime - Current ntime */
 	json_t *ntime = json_array_get(params, 7);
 	printf("Checkpoint 14 \n");
 	hex2bin(connection->job.version, (const char *) json_string_value(version), 4);
@@ -362,10 +389,12 @@ void  stratum_notify(struct stratum_connection *connection, json_t *json_obj) {
 	printf("Checkpoint 16 \n");
 	hex2bin(connection->job.ntime, (const char *) json_string_value(ntime), 4);
 	printf("Checkpoint 17 \n");
-	// clean_jobs - When true, server indicates that submitting shares 
-	// from previous jobs don't have a sense and such shares will be rejected.
-	// When this flag is set, miner should also drop all previous jobs, 
-	// so job_ids can be eventually rotated.
+	/*
+		clean_jobs - When true, server indicates that submitting shares 
+		from previous jobs don't have a sense and such shares will be rejected.
+		When this flag is set, miner should also drop all previous jobs, 
+		so job_ids can be eventually rotated.
+	*/
 	json_t *clean_jobs = json_array_get(params, 8);
 	if(json_is_true(clean_jobs)) {
 		connection->job.clean = true;
@@ -387,10 +416,7 @@ int main(int argc, char *argv[]) {
 	/* Stratum work */
 	struct work work;
 	// Creates stratum connection structure
-	struct stratum_connection *connection = (struct stratum_connection*) malloc(sizeof(struct stratum_connection));
-	connection->socket = socket;
-	connection->state = SUBS_SENT;
-	connection->send_id = 1;
+	struct stratum_connection *connection = create_stratum_connection(socket);
 	stratum_subscribe(connection);
 	stratum_authorize(connection, argv[3], argv[4]);
 	printf("Antes de crear queue \n");
