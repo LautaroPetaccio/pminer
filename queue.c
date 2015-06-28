@@ -1,6 +1,6 @@
 #include "queue.h"
 
-void print_queue_buffer(struct connection_buffer *cb) {
+void print_queue_buffer(connection_buffer *cb) {
 	printf("Queue dump \n");
 	for (size_t i = 0; i < (cb->buffer_end_pointer - cb->buffer); ++i){
 		printf("%c", cb->buffer[i]);
@@ -8,20 +8,20 @@ void print_queue_buffer(struct connection_buffer *cb) {
 	printf("\n");
 }
 
-struct connection_buffer* queue_create(size_t size) {
-	struct connection_buffer *cb = (struct connection_buffer*) malloc(sizeof(struct connection_buffer));
+connection_buffer* queue_create(size_t size) {
+	connection_buffer *cb = (connection_buffer*) malloc(sizeof(connection_buffer));
 	cb->buffer_size = size;
 	cb->buffer = malloc(size * sizeof(char));
 	cb->buffer_end_pointer = cb->buffer;
 	return cb;
 }
 
-void queue_free(struct connection_buffer *cb) {
+void queue_free(connection_buffer *cb) {
 	free(cb->buffer);
 	free(cb);
 }
 
-size_t queue_pop(struct connection_buffer *cb, char **message, char delimiter) {
+size_t queue_pop(connection_buffer *cb, char **message, char delimiter) {
 	// Extract message
 	char *str_end_ptr = (char *) memchr(cb->buffer, 
 										(int) delimiter, 
@@ -42,11 +42,11 @@ size_t queue_pop(struct connection_buffer *cb, char **message, char delimiter) {
 	return 0;
 }
 
-size_t queue_free_size(struct connection_buffer *cb) {
+size_t queue_free_size(connection_buffer *cb) {
 	return cb->buffer + cb->buffer_size - cb->buffer_end_pointer;
 }
 
-int queue_push(struct connection_buffer *cb, char *message, size_t size) {
+int queue_push(connection_buffer *cb, char *message, size_t size) {
 	if(queue_free_size(cb) >= size) {
 		memcpy(cb->buffer_end_pointer, message, size);
 		cb->buffer_end_pointer += size;

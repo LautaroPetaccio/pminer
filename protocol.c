@@ -1,62 +1,5 @@
-#include <stdio.h>
-#include <jansson.h>
-#include <stdbool.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <string.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <netdb.h> 
-#include "queue.h"
-#include "sha256.h"
-#include "util.h"
+#include "protocol.h"
 #define MAX_SEND_RETRY 4
-
-typedef enum {SUBS_SENT, AUTH_SENT, AUTHORIZED} stratum_state;
-
-struct work {
-	uint32_t data[32];
-	uint32_t target[8];
-
-	int height;
-	char *txs;
-	char *workid;
-
-	char *job_id;
-	size_t nonce2_len;
-	unsigned char *nonce2;
-};
-
-struct stratum_job {
-	char *job_id;
-	unsigned char prevhash[32];
-	size_t coinbase_size;
-	unsigned char *coinbase;
-	unsigned char *nonce2;
-	size_t merkle_count;
-	unsigned char **merkle;
-	char *merkle_root;
-	unsigned char version[4];
-	unsigned char nbits[4];
-	unsigned char ntime[4];
-	bool clean;
-	double diff;
-};
-
-struct stratum_connection {
-	int socket;
-	stratum_state state;
-	char *user;
-	unsigned int send_id;
-	double next_diff;
-	char *subscription_id;
-	char *notification_id;
-	size_t nonce1_size;
-	unsigned char *nonce1;
-	size_t nonce2_size;
-	struct stratum_job job;
-};
 
 char buffer[256];
 
@@ -80,6 +23,23 @@ struct stratum_connection* create_stratum_connection(int socket) {
 	return connection;
 }
 
+struct work* create_work() {
+	struct work* work = (struct work*) malloc(sizeof(struct work));
+	work->txs = NULL;
+	work->workid = NULL;
+	work->job_id = NULL;
+	work->nonce2 = NULL;
+	return work;
+}
+
+void destruct_work(struct work* work) {
+	if(work->txs) free(work->txs);
+	if(work->workid) free(work->workid);
+	if(work->job_id) free(work->job_id);
+	if(work->nonce2) free(work->nonce2);
+	free(work);
+}
+
 void destruct_stratum_connection(struct stratum_connection *connection) {
 	if(connection->subscription_id) free(connection->subscription_id);
 	//if(connection->notification_id) free(connection->subscription_id);
@@ -88,7 +48,7 @@ void destruct_stratum_connection(struct stratum_connection *connection) {
 	for (int i = 0; i < connection->job.merkle_count; i++)
 		free(connection->job.merkle[i]);
 	if(connection->job.merkle) free(connection->job.merkle);
-
+	free(connection);
 }
 
 void create_new_job(struct stratum_connection *connection, struct work* work) {
@@ -118,7 +78,6 @@ void create_new_job(struct stratum_connection *connection, struct work* work) {
 	}
 	/* Increment extranonce2 ??????*/
 	for (int i = 0; i < connection->nonce2_size && !++connection->job.nonce2[i]; i++);
-
 	/* Assemble block header */
 	memset(work->data, 0, 128);
 	/* Version */
@@ -158,7 +117,7 @@ void send_data(int sock, char *data, unsigned int data_size) {
 	fprintf(stderr, "ERROR writing to socket, max retries\n");
 }
 
-unsigned int recv_data(int sock, struct connection_buffer *recv_queue, unsigned int recv_size) {
+unsigned int recv_data(int sock, connection_buffer *recv_queue, unsigned int recv_size) {
 	if(queue_free_size(recv_queue) < recv_size) return 0;
 
 	char recv_buffer[recv_size];
@@ -309,7 +268,7 @@ void stratum_submit_share(struct stratum_connection *connection, struct work *wo
 	free(res_string);
 }
 
-void  stratum_notify(struct stratum_connection *connection, json_t *json_obj) {
+void stratum_notify(struct stratum_connection *connection, json_t *json_obj) {
 	//json_t *id = json_object_get(json_obj, "id");
 	json_t *params = json_object_get(json_obj, "params");
 	/* Stores prevhash - Hash of previous block. */
@@ -405,117 +364,4 @@ void  stratum_notify(struct stratum_connection *connection, json_t *json_obj) {
 		connection->job.clean = true;
 		printf("Server requested to clean jobs \n");
 	}
-	
-}
-
-int main(int argc, char *argv[]) {
-	if(strlen(argv[1]) == 0 || strlen(argv[2]) == 0) {
-		printf("Parameters should be added \n");
-		printf("./protocol server port user password \n");
-		return 0;
-	}
-	printf("Connecting to %s:%s \n Username: %s \n Password: %s \n",
-		argv[1], argv[2], argv[3], argv[4]);
-	int socket = sock(argv[1], argv[2]);
-	printf("Successfully connected \n");
-	/* Stratum work */
-	struct work work;
-	// Creates stratum connection structure
-	struct stratum_connection *connection = create_stratum_connection(socket);
-	stratum_subscribe(connection);
-	stratum_authorize(connection, argv[3], argv[4]);
-	printf("Antes de crear queue \n");
-	struct connection_buffer *recv_queue = queue_create(12288);
-	printf("Queue creada \n");
-	char *message;
-	size_t queue_received_size;
-	printf("Starting main loop \n");
-	int j = 0;
-	while(j< 100) {
-		// Recieves data and places it in the queue
-		recv_data(connection->socket, recv_queue, queue_free_size(recv_queue));
-		// Proccess all the messages in the queue
-		j++;
-		while(1) {
-			queue_received_size = queue_pop(recv_queue, &message, '\n');
-			if(j == 100) {
-				printf("Printed queue \n");
-				print_queue_buffer(recv_queue);
-			} 	
-			// Nothing to read
-			if(queue_received_size == 0) break;
-			message[queue_received_size - 1] = '\0';
-			printf("Mensaje recibido: \n %s \n", message);
-			printf("Recieved message \n");
-			// Process message
-			json_error_t *decode_error = NULL;
-			json_t *json_obj = json_loads(message, JSON_DECODE_ANY, decode_error);
-			if(!json_obj) {
-				printf("Error decoding JSON subscription \n");
-				printf("%s \n", decode_error->text);
-				printf("Error found in: \n");
-				printf("%s \n", decode_error->source);
-			}
-			json_t *id = json_object_get(json_obj, "id");
-			// If id is not null, it's a response
-			if(!json_is_null(id)) {
-				json_int_t id_value = json_integer_value(id);
-				json_t *error = json_object_get(json_obj, "error");
-				if(!json_is_null(error)) {
-					printf("Error in response with id: %lld \n", id_value);
-				}
-				switch(id_value) {
-					case 1:
-						if(connection->state == SUBS_SENT) {
-							printf("Recieved subscription \n");
-							connection->state = AUTH_SENT;
-							stratum_load_subscription(connection, json_obj);
-						}
-						else {
-							printf("Error no deberia estar este mensaje \n");
-							// Matar todo?
-						}
-						break;
-					case 2:
-						if(connection->state == AUTH_SENT) {
-							printf("Recieved authorization \n");
-							connection->state = AUTHORIZED;
-							json_t *result = json_object_get(json_obj, "result");
-							if(!json_is_true(result)) {
-								printf("Error subscribing user \n");
-								// Matar todo?
-							}
-						}
-						else {
-							printf("Error no deberia estar este mensaje \n");
-							// Matar todo?
-						}
-						break;
-					default:
-						printf("Seguramente es un mensaje de aceptado de shares \n");
-						break;
-					//Tiene que ser un mensaje de aceptado de submit shares
-
-				}
-			}
-			else {
-				// Recibo oferta de trabajo o cambiar dificultad, etc
-				json_t *method = json_object_get(json_obj, "method");
-				if(!strcmp(json_string_value(method), "mining.notify")) {
-					printf("Recibi un notify \n");
-					stratum_notify(connection, json_obj);
-					create_new_job(connection, &work);
-				}
-				else if(!strcmp(json_string_value(method), "mining.set_difficulty")) {
-					printf("Recibi un cambio de dificultad \n");
-				}
-			}
-			json_decref(json_obj);
-			free(message);
-		}
-	}
-	destruct_stratum_connection(connection);
-	queue_free(recv_queue);
-	close(connection->socket);
-	return 0;
 }

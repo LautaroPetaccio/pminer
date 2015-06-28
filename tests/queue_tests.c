@@ -16,7 +16,7 @@ extern void _test_free(void* const ptr, const char* file, const int line);
 #define free(ptr) _test_free(ptr, __FILE__, __LINE__)
 
 static void test_create(void **state) {
-	struct connection_buffer* queue = queue_create(2000);
+	connection_buffer *queue = queue_create(2000);
 	(void) state; /* unused */
 	assert_true(queue->buffer == queue->buffer_end_pointer);
 	assert_int_equal(queue->buffer_size, 2000);
@@ -24,7 +24,7 @@ static void test_create(void **state) {
 }
 
 static void test_push_pop(void **state) {
-	struct connection_buffer* queue = queue_create(2000);
+	connection_buffer *queue = queue_create(2000);
 	(void) state; /* unused */
 	queue_push(queue, "Mensaje1\n", sizeof(char) * 9);
 	char *message;
