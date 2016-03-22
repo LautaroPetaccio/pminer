@@ -1,4 +1,6 @@
 CC=gcc
+ASM=nasm
+ASMFLAGS=-f macho64
 CFLAGS=-c -Wall
 
 all: main tests
@@ -40,3 +42,6 @@ sha256_tests: tests/sha256_tests.o sha256.o util.o
 
 queue_tests: tests/queue_tests.o queue.o
 	$(CC) -lcmocka queue.o tests/queue_tests.o -o tests/queue_tests
+
+nasm_sha256:
+	$(ASM) $(ASMFLAGS) nasm_sha256.asm && ld -macosx_version_min 10.10 -lSystem -o nasm_sha256 nasm_sha256.o
