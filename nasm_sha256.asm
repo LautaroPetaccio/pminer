@@ -1,27 +1,35 @@
 ; nasm -f macho64 -g nasm_sha256.asm && ld -macosx_version_min 10.10 -lSystem -o nasm_sha256 nasm_sha256.o
-section .data
-	hello_world     db      "Hello World!", 0x0a, 0x0
-	sha256_init_text     db      "1: 0x%08x 2: 0x%08x 3: 0x%08x 4: 0x%08x", 0x0a, 0x0
-	initial_state:  dq 0xbb67ae85, 0x6a09e667, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
-	k: dq 0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da, 0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070, 0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
-
-section .bss
+section .data align=16
+	k: dd 0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da, 0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070, 0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+	initial_state:  dd 0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
+	padding: db 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+	ctx_data: dd 0x00000000, 0x11111111, 0x22222222, 0x33333333, 0x44444444, 0x55555555, 0x66666666, 0x77777777, 0x88888888, 0x99999999, 0xAAAAAAAA, 0xBBBBBBBB, 0xCCCCCCCC, 0xDDDDDDDD, 0xEEEEEEEE, 0xFFFFFFFF
+section .bss align=16
 	w: resd 64
+	ctx_state: resd 8
 
-.section __TEXT,__text
+section .text
 
 extern _printf
+extern _memcpy
+extern _memset
+extern _bin2hex
 
-global _main
+; global _asm_sha256_transform
+; global _asm_sha256_init
+; global _asm_sha256
+global _asm_sha256_hash
 
 %define ctx_state_offset(position) position * 4 
-%define ctx_data_offset(position) 256 + (position * 4)
+%define ctx_data_offset(position) 32 + (position * 4)
+%define SHA256_LENGTH 32
+%define SHA256_CTX_LENGTH 192
 
 ; Performs a byte swap of 4 32 bit values
 ; byte_swap32x4(dst&src, tmp_xmm1, tmp_xmm2)
 %macro byte_swap32x4_SSE2 3
-	movdqu %2, %1
-	movdqu %3, %1
+	movdqa %2, %1
+	movdqa %3, %1
 	pxor    %1, %1
 	punpckhbw %2, %1 ; interleave '0' with bytes of original
 	punpcklbw %3, %1 ;  so they become words 
@@ -30,14 +38,14 @@ global _main
 	pshuflw %3, %3, 0b00_01_10_11
 	pshufhw %3, %3, 0b00_01_10_11
 	packuswb %3, %2 ; pack/de-interleave, ie make the words back into bytes.
-	movdqu %1, %3
+	movdqa %1, %3
 %endmacro
 
 ; XMM rotate(dst&src, aux, quantity)
 %macro xmm_rotate 3
-	movdqu %2, %1
-	pslld  %1, %3
-	psrld  %2, (32 - %3)
+	movdqa %2, %1
+	psrld  %1, %3
+	pslld  %2, (32 - %3)
 	por %1, %2
 %endmacro 
 
@@ -68,10 +76,9 @@ global _main
 ; Remember that those modify the other registers
 ; Ch(x&dst, y, z)
 %macro CH 3
-	mov %4, 3
-	xor %2, 3
+	xor %2, %3
 	and %1, %2
-	xor %1, 3
+	xor %1, %3
 %endmacro
 
 ; Maj(x&dst, y, z, tmp)
@@ -84,9 +91,9 @@ global _main
 %endmacro
 
 %macro xmm_S0 4
-	movdqu %2, %1
+	movdqa %2, %1
 	xmm_rotate %2, %3, 13
-	movdqu %3, %1
+	movdqa %3, %1
 	xmm_rotate %3, %4, 22
 	xmm_rotate %1, %4, 2
 	pxor %1, %2
@@ -94,9 +101,9 @@ global _main
 %endmacro
 
 %macro xmm_S1 4
-	movdqu %2, %1
+	movdqa %2, %1
 	xmm_rotate %2, %3, 6
-	movdqu %3, %1
+	movdqa %3, %1
 	xmm_rotate %3, %4, 11
 	xmm_rotate %1, %4, 25
 	pxor %1, %2
@@ -104,9 +111,9 @@ global _main
 %endmacro
 
 %macro xmm_s0 4
-	movdqu %2, %1
+	movdqa %2, %1
 	xmm_rotate %2, %3, 7
-	movdqu %3, %1
+	movdqa %3, %1
 	xmm_rotate %3, %4, 18
 	; LOOK INTO ARITMETHIC AND LOGICAL SHIFTS IF THEY BEHAVE THE SAME IN THE C CODE
 	psrld %1, 3
@@ -115,9 +122,9 @@ global _main
 %endmacro
 
 %macro xmm_s1 4
-	movdqu %2, %1
+	movdqa %2, %1
 	xmm_rotate %2, %3, 17
-	movdqu %3, %1
+	movdqa %3, %1
 	xmm_rotate %3, %4, 19
 	; LOOK INTO ARITMETHIC AND LOGICAL SHIFTS IF THEY BEHAVE THE SAME IN THE C CODE
 	psrld %1, 10
@@ -125,88 +132,94 @@ global _main
 	pxor %1, %3
 %endmacro
 
-; unrolled_w_extend(memory ptr), xmm0, xmm1, xmm2, xmm3 must contain W at a giving point of the excecution
+; unrolled_w_extend(rax, xmm0, xmm1, xmm2, xmm3, tmp_xmm4, tmp_xmm5, tmp_xmm6, tmp2_xmm7
+; xmm0 .. xmm3 must contain 16 W's at any giving point of the excecution
 ; as the procedure works with 4 32 ints at the time, we only need 16 unrolls
-%macro unrolled_w_extend 1
+%macro unrolled_w_extend 8
 	; Sum the w[-7]'s to the w[-16]'s
 	; Get the w[-7]'s altogether
-	movdqu xmm4, xmm2
-	pslldq xmm4, 32
-	movdqu xmm5, xmm3
-	psrldq xmm5, 96
-	por xmm4, xmm5
+	movdqa %5, %3
+	psrldq %5, 4
+	movdqa %6, %4
+	pslldq %6, 12
+	por %5, %6
 	; xmm4 now has w[-7] + w[-16]
-	paddd xmm4, xmm0 
+	paddd %5, %1
+
 	; Get the 15's
-	movdqu xmm5, xmm0
-	movdqu xmm6, xmm1
-	psrldq xmm6, 96
-	por xmm5, xmm6
+	movdqa %6, %1
+	movdqa %7, %2
+	pslldq %7, 12
+	psrldq %6, 4
+	por %6, %7
+
 	; Push the 4 first ints and shift
-	movdqu [%1], xmm0
-	add %1, 16d ; push the mem pointer to the next place in memory
-	movdqu xmm0, xmm1
-	movdqu xmm1, xmm2
-	movdqu xmm2, xmm3
-	movdqu xmm3, xmm4
+	; movdqa [%1], %1
+	; add %1, 16d ; push the mem pointer to the next place in memory
+	movdqa %1, %2
+	movdqa %2, %3
+	movdqa %3, %4
+	movdqa %4, %5
 	; Apply s0 to each 15's
-	xmm_s0 xmm5, xmm4, xmm6, xmm7
-	paddd xmm3, xmm5 ; LOOK IF PADDD IS THE ONE WE NEED
+	xmm_s0 %6, %5, %7, %8
+	paddd %4, %6
 	; Apply S1 to the two 2's we have
-	movdqu xmm4, xmm2
+	movdqa %5, %3
 	;pand xmm4, 0000000000000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-	pslldq xmm4, 64
-	xmm_s1 xmm4, xmm5, xmm6, xmm7
+	psrldq %5, 8
+	xmm_s1 %5, %6, %7, %8
 	; Adding the two 2's to xmm3 will result in the higher double word
 	; computed, we then can use that higher doubler word to compute the
 	; last two 2's left and get a complete 128 extension
-	paddd xmm3, xmm4
+	paddd %4, %5
 
 	; Get the new w[-2]'s that we have just generated
-	movdqu xmm4, xmm3
-	psrldq xmm4, 64
+	movdqa %5, %4
+	pslldq %5, 8
 	; Coping xmm3 altogether isn't better? then shifting
 	; LOOK IF THIS DOUBLE WORDS HAVE THE OTHER DOUBLE WORDS IN 0 WHEN WE ADD THEM
-	xmm_s1 xmm4, xmm5, xmm6, xmm7
-	paddd xmm3, xmm4
+	xmm_s1 %5, %6, %7, %8
+	paddd %4, %5
 %endmacro
 
 
-_main:
-push rbp
-mov rbp, rsp
+; _main:
+; push rbp
+; mov rbp, rsp
 
-;sub rsp, 8
-; lea rdi, [rel hello_world]
-; call _printf
+; ; lea rdi, [rel hello_world]
+; ; call _printf
 
-lea rdi, [rel w]
-call _sha256_init
+; lea rdi, [rel ctx_state]
+; call _sha256_init
 
-; lea rdi, [rel sha256_init_text]
-; lea rsi, [rel w]
-; mov esi, [rsi]
-; lea rdx, [rel w + 4]
-; mov edx, [rdx]
-; lea rcx, [rel w + 8]
-; mov ecx, [rcx]
-; lea r8, [rel w + 12]
-; mov r8d, [r8]
-; call _printf
-;mov rax, 0x2000004      ; System call write = 4
-;mov rdi, 1              ; Write to standard out = 1
-;mov rsi, hello_world    ; The address of hello_world string
-;mov rdx, 14             ; The size to write
-		                ; Invoke the kernel
-mov rax, 0x2000001      ; System call number for exit = 1
-mov rdi, 0              ; Exit success = 0
+; lea rdi, [rel initial_state]
 
-pop rbp
-syscall                 ; Invoke the kernel
+; call _sha256_transform
+; ; lea rdi, [rel sha256_init_text]
+; ; lea rsi, [rel w]
+; ; mov esi, [rsi]
+; ; lea rdx, [rel w + 4]
+; ; mov edx, [rdx]
+; ; lea rcx, [rel w + 8]
+; ; mov ecx, [rcx]
+; ; lea r8, [rel w + 12]
+; ; mov r8d, [r8]
+; ; call _printf
+; ;mov rax, 0x2000004      ; System call write = 4
+; ;mov rdi, 1              ; Write to standard out = 1
+; ;mov rsi, hello_world    ; The address of hello_world string
+; ;mov rdx, 14             ; The size to write
+; 		                ; Invoke the kernel
+; mov rax, 0x2000001      ; System call number for exit = 1
+; mov rdi, 0              ; Exit success = 0
+
+; pop rbp
+; syscall                 ; Invoke the kernel
 
 
 ; Recieves a ctx struct in RDI
-_sha256_transform:
+_asm_sha256_transform:
 push rbp
 mov rbp, rsp
 push rbx
@@ -216,57 +229,170 @@ push r14
 push r15
 
 ; Copies 16 32bits uint and transforms them into big endian
+; lea rdi, [rel ctx_data]
 movdqu xmm0, [rdi + ctx_data_offset(0)]
-movdqu xmm1, [rdi + ctx_data_offset(16)]
-movdqu xmm2, [rdi + ctx_data_offset(32)]
-movdqu xmm3, [rdi + ctx_data_offset(48)]
+movdqu xmm1, [rdi + ctx_data_offset(4)]
+movdqu xmm2, [rdi + ctx_data_offset(8)]
+movdqu xmm3, [rdi + ctx_data_offset(12)]
 
 byte_swap32x4_SSE2 xmm0, xmm4, xmm5 
 byte_swap32x4_SSE2 xmm1, xmm4, xmm5
 byte_swap32x4_SSE2 xmm2, xmm4, xmm5
 byte_swap32x4_SSE2 xmm3, xmm4, xmm5
 
-; Copy the address of w into rax
-mov rax, w
-
-; W extension
-%rep 16
-	unrolled_w_extend rax
-%endrep
-; See if I need to move to memory all the xmm1, xmm2 and xmm3 regs
-
 ; Copy state to xmm0, xmm1 (ls)
-; xmm0 and xmm1 become ls
-movdqu xmm0, [rdi + ctx_state_offset(0)]
-movdqu xmm1, [rdi + ctx_state_offset(4)]
+; xmm4 and xmm5 become ls
+movdqu xmm4, [rdi + ctx_state_offset(0)]
+movdqu xmm5, [rdi + ctx_state_offset(4)]
 
 ; Main loop unrolled
-lea rax, [rel w]
-movdqu xmm2, [rax]
-lea rax, [rel k]
-movdqu xmm3, [rax]
 
-; Calculate t1
+main_loop:
 
-; Calculate t2
+movd r8d, xmm5
+psrldq xmm5, 4
 
-; Copy the result to the local state
-pslldq xmm1, 32
-movdqu xmm4, xmm0
-psrldq xmm4, 96
-; Sum t1
-por xmm1, xmm4
+movd r9d, xmm5
+psrldq xmm5, 4
 
-pslldq xmm0, 32
+movd r10d, xmm5
+psrldq xmm5, 4
+
+movd r11d, xmm5
+psrldq xmm5, 4
+
+movd r12d, xmm4
+psrldq xmm4, 4
+
+movd r13d, xmm4
+psrldq xmm4, 4
+
+movd r14d, xmm4
+psrldq xmm4, 4
+
+movd r15d, xmm4
+psrldq xmm4, 4
+
+%assign i 0
+%rep 16
+	; Correct memory reading
+	; W extension
+	; Each W extension generates 4 new w's
+	; We have conserverd xmm0, xmm1, xmm2 and xmm3
+	; from the begging of the function to use it here
+	unrolled_w_extend xmm0, xmm1, xmm2, xmm3, xmm4, xmm5, xmm6, xmm7
+
+	movdqa xmm4, [rel k + (i * 16)]
+	paddd xmm4, xmm0
+	%assign i i+1
+	%rep 4
+		; rcx => Holds t1
+		; rbx
+		; rax
+		; rdx
+		; rdi/
+		; rsi
+
+		; r12d => ls[0]
+		; r13d => ls[1]
+		; r14d => ls[2]
+		; r15d => ls[3]
+		; r8d => ls[4]
+		; r9d => ls[5]
+		; r10d => ls[6]
+		; r11d => ls[7]
+
+		; ECX will hold t1
+
+		; Starts with r[7] in ecx
+		mov ecx, r11d
+		; Put k[i] + w[i] in eax
+		movd eax, xmm4
+		psrldq xmm4, 4
+		; Ads k[i] to ecx
+		; add ecx, eax
+		; Put w[i] in eax
+		; movd eax, xmm0
+		; psrldq xmm0, 4
+		; Adds k[i] + w[i] to ecx
+		add ecx, eax
+		; Mov l[4]
+		mov edx, r8d 
+		; Do S1
+		S1 edx, eax, esi
+		; Adds S1 to ecx
+		add ecx, edx
+		; Do CH
+		mov edx, r8d
+		mov esi, r9d
+		mov eax, r10d
+		CH edx, esi, eax
+		; Adds the result of Ch to ecx and obtains t1
+		add ecx, edx
+
+		; t1 completed, move the last 8 bytes
+		mov r11d, r10d
+		mov r10d, r9d
+		mov r9d, r8d
+		mov r8d, r15d
+		; ls[4] = ls[3] + t1
+		add r8d, ecx
+
+		; Now to the other half part
+		; Mov each integer
+		mov r15d, r14d
+		mov r14d, r13d
+		mov r13d, r12d
+		; r12d will hold t2
+		S0 r12d, eax, edx
+		mov ebx, r13d
+		mov eax, r14d
+		mov edx, r15d
+		Maj ebx, eax, edx, esi
+		add r12d, ebx
+		; We have now t2_1 in r12d
+		; Add t1_1 & t2_1
+		add r12d, ecx
+	%endrep
+%endrep
+
+; Rebuild to xmm0
+movd xmm0, r12d
+movd xmm1, r13d
+pslldq xmm1, 4
+por xmm0, xmm1
+movd xmm1, r14d
+pslldq xmm1, 8
+por xmm0, xmm1
+movd xmm1, r15d
+pslldq xmm1, 12
+por xmm0, xmm1
+
+; Rebuild to xmm1
+movd xmm1, r8d
+movd xmm2, r9d
+pslldq xmm2, 4
+por xmm1, xmm2
+movd xmm2, r10d
+pslldq xmm2, 8
+por xmm1, xmm2
+movd xmm2, r11d
+pslldq xmm2, 12
+por xmm1, xmm2
 
 ; Copy local state to state
 ; Adds the result to the state
-movdqu xmm2, [rdi + ctx_data_offset(0)]
-movdqu xmm3, [rdi + ctx_data_offset(4)]
-paddd xmm0, xmm2
-paddd xmm1, xmm3
-movdqu [rdi + ctx_data_offset(0)], xmm0
-movdqu [rdi + ctx_data_offset(4)], xmm1
+shit_has_been_done:
+nop
+; Get the state data again
+movdqu xmm4, [rdi + ctx_state_offset(0)]
+movdqu xmm5, [rdi + ctx_state_offset(4)]
+; Sum the local with the ctx state data
+paddd xmm0, xmm4
+paddd xmm1, xmm5
+; Store the new ctx data
+movdqu [rdi + ctx_state_offset(0)], xmm0
+movdqu [rdi + ctx_state_offset(4)], xmm1
 
 pop r15
 pop r14
@@ -276,24 +402,171 @@ pop rbx
 pop rbp
 ret
 
-_sha256_init:
+_asm_sha256_init:
 ; IF NOT USING THE REGISTERS, DO NOT PUSH THEM
+lea rax, [rel initial_state]
+movdqu xmm0, [rax]
+movdqu xmm1, [rax + 16]
+movdqu [rdi + ctx_state_offset(0)], xmm0
+movdqu [rdi + ctx_state_offset(4)], xmm1
+ret
+
+_asm_sha256:
 push rbp
 mov rbp, rsp
+sub rsp, 8
 push rbx
 push r12
 push r13
 push r14
 push r15
 
-lea rax, [rel initial_state]
-movdqu xmm0, [rax]
-movdqu xmm1, [rax + 16]
-movdqu [rdi + ctx_state_offset(0)], xmm0
-movdqu [rdi + ctx_state_offset(4)], xmm1
+; rbx => sha256_ctx *context
+; r12 => uint8_t *data
+; r13 => size_t length
+; r14 => bytes_left
+; r15 => bytes_hashed
+
+mov rbx, rdi
+mov r12, rsi
+mov r13, rdx
+; Set bytes_left and bytes_hashed to 0
+mov r14, 0d
+mov r15, 0d
+
+.hashedCicle:
+; See if the bytes
+cmp r15, r13
+; If the bytes_hashed are >= to length, we have finished
+jnl .end
+; bytes_left = length - bytes_hashed;
+mov r14, r13
+sub r14, r15
+;bytes_left < 56
+cmp r14, 56d
+jnl .bytesLeftBetween57And64
+add r15, r14
+lea rdi, [rbx + ctx_data_offset(0)]
+mov rsi, r12
+mov rdx, r14
+call _memcpy
+lea rdi, [rbx + ctx_data_offset(0) + r14]
+; Add bytes left
+;add rdi, r14
+lea rsi, [rel padding]
+mov rdx, 56d
+sub rdx, r14
+call _memcpy
+lea rdi, [rbx + ctx_state_offset(0) + 56]
+; be_bit_length
+mov rax, r15
+mov rcx, 8d
+mul rcx
+bswap rax
+mov [rbp - 8], rax
+lea rsi, [rbp-8]
+mov rdx, 8d
+call _memcpy
+mov rdi, rbx
+call _asm_sha256_transform
+jmp .hashedCicle
+
+.bytesLeftBetween57And64:
+cmp r14, 64d
+jnle .bytesLeftGreaterThan64
+add r15, r14
+lea rdi, [rbx + ctx_data_offset(0)]
+mov rsi, r12
+mov rdx, r14
+call _memcpy
+
+lea rdi, [rbx + ctx_data_offset(0) + r14]
+lea rsi, [rel padding]
+mov rdx, 64d
+sub rdx, r14
+call _memcpy
+
+mov rdi, rbx
+call _asm_sha256_transform
+
+cmp r14, 64d
+je .justPadd
+lea rdi, [rbx + ctx_data_offset(0)]
+mov rsi, 0d
+mov rdx, 56d
+call _memset
+
+.justPadd:
+lea rdi, [rbx + ctx_data_offset(0)]
+lea rsi, [rel padding]
+mov rdx, 56d
+call _memcpy
+
+lea rdi, [rbx + ctx_data_offset(0) + 56]
+; be_bit_length
+mov rax, r15
+mov rcx, 8d
+mul rcx
+bswap rax
+mov [rbp - 8], rax
+lea rsi, [rbp-8]
+mov rdx, 8d
+call _memcpy
+
+mov rdi, rbx
+call _asm_sha256_transform
+jmp .hashedCicle
+
+.bytesLeftGreaterThan64:
+add r15, 64d
+lea rdi, [rbx + ctx_data_offset(0)]
+mov rsi, r12
+mov rdx, 64d
+call _asm_sha256_transform
+jmp .hashedCicle
+
+.end:
+; Convert to big endian
+movdqu xmm0, [rbx + ctx_state_offset(0)]
+movdqu xmm1, [rbx + ctx_state_offset(4)]
+byte_swap32x4_SSE2 xmm0, xmm2, xmm3
+byte_swap32x4_SSE2 xmm1, xmm2, xmm3
+movdqu [rbx + ctx_state_offset(0)], xmm0
+movdqu [rbx + ctx_state_offset(4)], xmm1
 
 pop r15
 pop r14
+pop r13
+pop r12	
+pop rbx
+add rsp, 8
+pop rbp
+ret
+
+_asm_sha256_hash:
+push rbp
+mov rbp, rsp
+push rbx
+push r12
+push r13
+; Align stack
+sub rsp, 8d
+; Create local ctx context
+sub rsp, SHA256_CTX_LENGTH
+mov rbx, rdi
+mov r12, rsi
+mov r13, rdx
+lea rdi, [rbp - SHA256_CTX_LENGTH - 8]
+call _asm_sha256_init
+lea rdi, [rbp - SHA256_CTX_LENGTH - 8]
+mov rsi, rbx
+mov rdx, r12
+call _asm_sha256
+; Call _bin2hex
+mov rdi, rdx
+lea rdi, [rbp - SHA256_CTX_LENGTH - 8 + ctx_state_offset(0)]
+mov rdx, SHA256_LENGTH
+add rsp, SHA256_CTX_LENGTH + 8
 pop r13
 pop r12
 pop rbx
