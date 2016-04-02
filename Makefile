@@ -1,14 +1,16 @@
 CC=gcc
 ASM=nasm
 ASMFLAGS=-f macho64
-CFLAGS=-c -Wall
+CFLAGS=-c -Wall -I/usr/local/include
+LDFLAGS=-L/usr/local/lib
+
 
 all: main tests
 
 tests: sha256_tests queue_tests
 
 clean:
-	rm *.o *.ghc tests/*.o
+	rm *.o *.gch tests/*.o tests/queue_tests tests/sha256_tests main analisis
 
 main.o: main.c
 	$(CC) $(CFLAGS) main.c
@@ -35,13 +37,19 @@ protocol.o: protocol.h protocol.c
 	$(CC) $(CFLAGS) protocol.h protocol.c
 
 main: main.o queue.o parser.o protocol.o sha256.o util.o
-	$(CC) main.o parser.o protocol.o queue.o sha256.o util.o -o main -ljansson -o main
+	$(CC) $(LDFLAGS) main.o parser.o protocol.o queue.o sha256.o util.o -o main -ljansson -o main
 
 sha256_tests: tests/sha256_tests.o sha256.o util.o
-	$(CC) -lcmocka sha256.o util.o tests/sha256_tests.o -o tests/sha256_tests
+	$(CC) $(LDFLAGS) -lcmocka sha256.o util.o tests/sha256_tests.o -o tests/sha256_tests
 
 queue_tests: tests/queue_tests.o queue.o
-	$(CC) -lcmocka queue.o tests/queue_tests.o -o tests/queue_tests
+	$(CC) $(LDFLAGS) -lcmocka queue.o tests/queue_tests.o -o tests/queue_tests
 
-nasm_sha256:
-	$(ASM) $(ASMFLAGS) nasm_sha256.asm && ld -macosx_version_min 10.10 -lSystem -o nasm_sha256 nasm_sha256.o
+analisis: nasm_sha256.o analisis.o util.o sha256.o
+	ld -macosx_version_min 10.10 -lSystem -o analisis analisis.o nasm_sha256.o util.o sha256.o
+
+analisis.o: analisis.c
+	$(CC) $(CFLAGS) analisis.c
+
+nasm_sha256.o:
+	$(ASM) $(ASMFLAGS) nasm_sha256.asm
