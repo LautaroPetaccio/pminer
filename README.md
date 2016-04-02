@@ -1,5 +1,9 @@
 # PMiner - Stratum Bitcoin Miner
 
-* Comes with the SHA256d algorithm optimized to run in x64 arquitectures.
-* Includes an interface to communicate with a Xillin FPGA board.
-* Includes the verilog code to connect to the interface and mine.
+Pminer is intended to be a light and fast bitcoin minner.
+
+Features:
+* SHA256d library in C and ASM, optimized to run with SSE2.
+* Multi-threaded mining
+* TODO: Interface to communicate with a Xillin FPGA board.
+* SHA256 Verilog for mining with Xillin FPGA boards.
