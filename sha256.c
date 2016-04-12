@@ -13,6 +13,7 @@
 #define s1(x)           (ROTR(x, 17) ^ ROTR(x, 19) ^ (x >> 10))
 
 #define SHA256_LENGTH 32
+#define WORK_DATA_LENGTH 256
 
 static const uint32_t k[64] = {
 	0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
@@ -23,6 +24,10 @@ static const uint32_t k[64] = {
 	0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
 	0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
 	0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+};
+
+static const uint32_t initial_state[8] = {
+	0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
 };
 
 uint32_t w[64];
@@ -36,14 +41,13 @@ static uint8_t sha256_padding[64] = {
 
 /* Initiate the sha256 state that will hold our binary hash */
 static void sha256_init(sha256_ctx *ctx) {
-	ctx->state[0] = 0x6a09e667;
-	ctx->state[1] = 0xbb67ae85;
-	ctx->state[2] = 0x3c6ef372;
-	ctx->state[3] = 0xa54ff53a;
-	ctx->state[4] = 0x510e527f;
-	ctx->state[5] = 0x9b05688c;
-	ctx->state[6] = 0x1f83d9ab;
-	ctx->state[7] = 0x5be0cd19;
+	/* Using memcpy as a faster way to copy the initial state */
+	memcpy(ctx->state, initial_state, 32);
+}
+
+static void sha256_init_scan(uint32_t *state) {
+	/* Using memcpy as a faster way to copy the initial state */
+	memcpy(state, initial_state, 32);
 }
 
 /* Processes 64 bytes of data */
@@ -59,6 +63,59 @@ static void sha256_transform(sha256_ctx *ctx) {
 
 	uint32_t ls[8]; // local state
 	memcpy(ls, ctx->state, sizeof(uint32_t) * 8);
+	/* 
+		ls[0] -> a
+		ls[1] -> b
+		ls[2] -> c
+		ls[3] -> d
+		ls[4] -> e
+		ls[5] -> f
+		ls[6] -> g
+		ls[7] -> h 
+	*/
+
+	/* Main loop */
+	uint32_t t1, t2;
+	for(int i = 0; i < 64; ++i) {
+		t1 = ls[7] + S1(ls[4]) + Ch(ls[4], ls[5], ls[6]) + k[i] + w[i];
+		t2 = S0(ls[0]) + Maj(ls[0], ls[1], ls[2]);
+		ls[7] = ls[6];
+		ls[6] = ls[5];
+		ls[5] = ls[4];
+		ls[4] = ls[3] + t1;
+		ls[3] = ls[2];
+		ls[2] = ls[1];
+		ls[1] = ls[0];
+		ls[0] = t1 + t2;
+	}
+
+	/* Adds the result to the state */
+
+	ctx->state[0] += ls[0];
+	ctx->state[1] += ls[1];
+	ctx->state[2] += ls[2];
+	ctx->state[3] += ls[3];
+	ctx->state[4] += ls[4];
+	ctx->state[5] += ls[5];
+	ctx->state[6] += ls[6];
+	ctx->state[7] += ls[7];
+
+}
+
+static void sha256_transform_scan(uint32_t *state, const uint32_t *data, uint32_t *w, uint32_t variable_data_size) {
+	/* Copies data (16 32bits uint) */
+	memcpy(w + (variable_data_size/4), data + (variable_data_size/4), 64 - variable_data_size);
+	for(int i = 0; i < (variable_data_size/4); ++i) {
+		w[i] = swap_uint32(data[i]);
+	}
+
+	/* Extends w */
+	for(int i = 16; i < 64; ++i) {
+		w[i] = w[i-16] + s0(w[i-15]) + w[i-7] + s1(w[i-2]);
+	}
+
+	uint32_t ls[8]; // local state
+	memcpy(ls, state, sizeof(uint32_t) * 8);
 	/* 
 		ls[0] -> a
 		ls[1] -> b
@@ -88,20 +145,19 @@ static void sha256_transform(sha256_ctx *ctx) {
 
 	/* Adds the result to the state */
 
-	ctx->state[0] += ls[0];
-	ctx->state[1] += ls[1];
-	ctx->state[2] += ls[2];
-	ctx->state[3] += ls[3];
-	ctx->state[4] += ls[4];
-	ctx->state[5] += ls[5];
-	ctx->state[6] += ls[6];
-	ctx->state[7] += ls[7];
+	state[0] += ls[0];
+	state[1] += ls[1];
+	state[2] += ls[2];
+	state[3] += ls[3];
+	state[4] += ls[4];
+	state[5] += ls[5];
+	state[6] += ls[6];
+	state[7] += ls[7];
 
 }
 
 static void sha256(sha256_ctx *context, const uint8_t *data, const size_t length) {
 	if(length == 0) return;
-
 	uint32_t bytes_left, bytes_hashed = 0;
 	/* Processes data to be hashed */
 	while(bytes_hashed < length) {
@@ -110,8 +166,8 @@ static void sha256(sha256_ctx *context, const uint8_t *data, const size_t length
 			and append the lenght in bits in big endian
 		*/
 		if(bytes_left < 56) {
+			memcpy((uint8_t *) context->data, data + bytes_hashed, bytes_left);
 			bytes_hashed += bytes_left;
-			memcpy((uint8_t *) context->data, data, bytes_left);
 			memcpy((uint8_t *) context->data + bytes_left, sha256_padding, 56 - bytes_left);
 			uint64_t be_bit_lenght = swap_uint64(bytes_hashed * 8);
 			memcpy((uint8_t *) context->data + 56, &be_bit_lenght, 8);
@@ -121,9 +177,9 @@ static void sha256(sha256_ctx *context, const uint8_t *data, const size_t length
 		/* Less than 64 bytes of data left but more than 56 */
 		/* The lenght in bits doesn't fit */
 		else if(bytes_left <= 64) {
-			bytes_hashed += bytes_left;
 			/* Uses the padding to get to 64 bytes and hashes */
-			memcpy((uint8_t *) context->data, data, bytes_left);
+			memcpy((uint8_t *) context->data, data + bytes_hashed, bytes_left);
+			bytes_hashed += bytes_left;
 			memcpy((uint8_t *) context->data + bytes_left, sha256_padding, 64 - bytes_left);
 			sha256_transform(context);
 
@@ -142,8 +198,8 @@ static void sha256(sha256_ctx *context, const uint8_t *data, const size_t length
 			sha256_transform(context);
 		}
 		else {
+			memcpy((uint8_t *) context->data, data + bytes_hashed, 64);
 			bytes_hashed += 64;
-			memcpy((uint8_t *) context->data, data, 64);
 			sha256_transform(context);
 		}
 	}
@@ -187,4 +243,21 @@ void sha256_hash(const uint8_t *data, const size_t length, char *hash) {
 	sha256(&context, data, length);
 
 	bin2hex(hash, (uint8_t *) context.state, SHA256_LENGTH);
+}
+
+void sha256d_scan(uint32_t *fst_state, uint32_t *snd_state, const uint32_t *data, uint32_t *lw) {
+	/* First hash */
+	sha256_init_scan(fst_state);
+	sha256_transform_scan(fst_state, data, lw, 64);
+	sha256_transform_scan(fst_state, data + 16, lw, 16);
+	for (int i = 0; i < 8; ++i) {
+		fst_state[i] = swap_uint32(fst_state[i]);
+	}
+	/* Second hash */
+	sha256_init_scan(snd_state);
+	sha256_transform_scan(snd_state, fst_state, lw, 32);
+	/* Converts result to big endian */
+	for (int i = 0; i < 8; ++i) {
+		snd_state[i] = swap_uint32(snd_state[i]);
+	}
 }
