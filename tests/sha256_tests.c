@@ -5,12 +5,17 @@
 #include <setjmp.h>
 #include <cmocka.h>
 #include <string.h>
+#include <time.h>
 #include "../sha256.h"
+#include "../util.h"
 
 extern void* _test_malloc(const size_t size, const char* file, const int line);
 extern void* _test_calloc(const size_t number_of_elements, const size_t size,
                           const char* file, const int line);
 extern void _test_free(void* const ptr, const char* file, const int line);
+
+extern void asm_sha256_hash(const uint8_t *data, const size_t length, char *hash);
+extern void asm_sha256d_scan(uint32_t *fst_state, uint32_t *snd_state, const uint32_t *data, uint32_t *lw);
 
 #define malloc(size) _test_malloc(size, __FILE__, __LINE__)
 #define calloc(num, size) _test_calloc(num, size, __FILE__, __LINE__)
@@ -79,6 +84,29 @@ static void test_length_greater_than_64(void **state) {
 		"fcae0435ecabaebf770d9506763a6e3cd0aaab640ff0305312d91fd6979a2c99");
 }
 
+static void test_with_other_source(void **state) {
+	(void) state; /* unused */
+	char hash[65];
+	char *results[3] = {
+		"a58dd8680234c1f8cc2ef2b325a43733605a7f16f288e072de8eae81fd8d6433",
+		"0be82463c427624862fd06226c78e4c0cfd78fd4e5376da3110364bb0ef454a4",
+		"67aed39c1e9b8a4c653c816d16f54e18c57a7ddfa8f1245958f4a750ebf4d4c2",
+		};
+	char *data[3] = {
+		"Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+		"Curabitur maximus dictum condimentum.",
+		"Nulla gravida maximus velit, eu sodales mi pretium non. Fusce malesuada accumsan tortor in venenatis.",
+		};
+	for (int i = 0; i < 3; ++i) {
+		sha256_hash((uint8_t *) data[i], strlen(data[i]), hash);
+		assert_string_equal(hash, results[i]);
+		/* The assembly function must give the same results */
+		memset(hash, 0, 65);
+		asm_sha256_hash((uint8_t *) data[i], strlen(data[i]), hash);
+		assert_string_equal(hash, results[i]);
+	}
+}
+
 static void test_256d_little_endian(void **state) {
 	(void) state; /* unused */
 	/* 64 bytes */
@@ -90,6 +118,40 @@ static void test_256d_little_endian(void **state) {
 		"58636c3ec08c12d55aedda056d602d5bcca72d8df6a69b519b72d32dc2428b4f");
 }
 
+static void test_256d_scan(void **state) {
+	(void) state; /* unused */
+	/* Hash scan */
+	uint32_t wl[64];
+	uint32_t data[32];
+	uint32_t fst_state[16];
+	uint32_t hash_result[8];
+	srand(time(NULL));
+	// memset(data, 0x00, 128);
+	for (int i = 0; i < 20; ++i) {
+		data[i] = rand() % 2147483647;
+	}
+
+	memset(data + 20, 0x00, 48);
+	data[20] = 0x80000000;
+	data[31] = 0x00000280;
+	fst_state[8] = 0x80000000;
+	memset(fst_state + 9, 0, 24);
+	fst_state[15] = 0x00000100;
+	sha256d_scan(fst_state, hash_result, data, wl);
+
+	char hash_scan[65];
+	char hash_normal[65];
+	sha256d_hash_be((uint8_t *) data, 80, hash_normal);
+	bin2hex(hash_scan, (uint8_t *) hash_result, 32);
+
+	assert_string_equal(hash_scan, hash_normal);
+
+	memset(hash_scan, 0, 65);
+	asm_sha256d_scan(fst_state, hash_result, data, wl);
+	bin2hex(hash_scan, (uint8_t *) hash_result, 32);
+	assert_string_equal(hash_scan, hash_normal);
+}
+
 int main(void) {
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test(test_length_smaller_than_56),
@@ -98,6 +160,8 @@ int main(void) {
 		cmocka_unit_test(test_length_equal_to_64),
 		cmocka_unit_test(test_length_greater_than_64),
 		cmocka_unit_test(test_256d_little_endian),
+		cmocka_unit_test(test_256d_scan),
+		cmocka_unit_test(test_with_other_source),
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);
