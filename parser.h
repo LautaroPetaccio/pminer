@@ -12,6 +12,7 @@ struct arguments {
 	char *port;
 	char *username;
 	char *password;
+	int cores;
 };
 
 void parse_arguments(int argc, char **argv, struct arguments *arguments);

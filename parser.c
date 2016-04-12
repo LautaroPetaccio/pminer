@@ -5,6 +5,7 @@ void print_usage() {
 	printf("-h hostname:port \n");
 	printf("-u username \n");
 	printf("-p password \n");
+  printf("-c cores \n");
 }
 
 void parse_arguments(int argc, char **argv, struct arguments *arguments) {
@@ -14,6 +15,7 @@ void parse_arguments(int argc, char **argv, struct arguments *arguments) {
   arguments->port = "3334";
   arguments->username = 0;
   arguments->password = 0;
+  arguments->cores = 0;
 
   int c;
   while(1) {
@@ -26,12 +28,13 @@ void parse_arguments(int argc, char **argv, struct arguments *arguments) {
             {"host",  required_argument, 0, 'h'},
             {"username",    required_argument, 0, 'u'},
             {"password",    required_argument, 0, 'p'},
+            {"cores",    optional_argument, 0, 'c'},
             {0, 0, 0, 0}
           };
         /* getopt_long stores the option index here. */
     int option_index = 0;
 
-    c = getopt_long (argc, argv, "h:u:p:",
+    c = getopt_long (argc, argv, "h:u:p:c:",
                      long_options, &option_index);
 
     /* Detect the end of the options. */
@@ -70,6 +73,8 @@ void parse_arguments(int argc, char **argv, struct arguments *arguments) {
         /* printf ("option -p with value `%s'\n", optarg); */
         arguments->password = optarg;
         break;
+      case 'c':
+        arguments->cores = atoi(optarg);
 
       default:
       	/* Ignore unkown parameters */
