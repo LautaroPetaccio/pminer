@@ -13,6 +13,20 @@ uint32_t swap_uint32(uint32_t val) {
 	return ((((val) << 24) & 0xff000000u) | (((val) << 8) & 0x00ff0000u) | (((val) >> 8) & 0x0000ff00u) | (((val) >> 24) & 0x000000ffu));
 }
 
+uint32_t le32dec(const void *pp) {
+	const uint8_t *p = (uint8_t const *)pp;
+	return ((uint32_t)(p[0]) + ((uint32_t)(p[1]) << 8) +
+	    ((uint32_t)(p[2]) << 16) + ((uint32_t)(p[3]) << 24));
+}
+
+uint32_t be32dec(const void *pp)
+{
+	const uint8_t *p = (uint8_t const *)pp;
+	return ((uint32_t)(p[3]) + ((uint32_t)(p[2]) << 8) +
+	    ((uint32_t)(p[1]) << 16) + ((uint32_t)(p[0]) << 24));
+}
+
+
 /* Endian swap a string */
 void byte_swap(unsigned char* data, int len) {
         int c;
@@ -65,4 +79,26 @@ void bin2hex(char *s, const unsigned char *p, const size_t len) {
 	int i;
 	for (i = 0; i < len; i++)
 		sprintf(s + (i * 2), "%02x", (unsigned int) p[i]);
+}
+
+bool fulltest(const uint32_t *hash, const uint32_t *target) {
+	char hash_to_check[65];
+	char target_to_check[65];
+	int i;
+	bool rc = true;
+	bin2hex(hash_to_check, (const unsigned char *) hash, 32);
+	bin2hex(target_to_check, (const unsigned char *) target, 32);
+	printf("Checking for possible share:\nHash: %s\nTarget: %s\n", hash_to_check, target_to_check);
+	
+	for (i = 7; i >= 0; i--) {
+		if (hash[i] > target[i]) {
+			rc = false;
+			break;
+		}
+		if (hash[i] < target[i]) {
+			rc = true;
+			break;
+		}
+	}
+	return rc;
 }
