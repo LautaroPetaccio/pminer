@@ -15,6 +15,9 @@ connection_buffer* queue_create(size_t size);
 void queue_free(connection_buffer *cb);
 size_t queue_pop(connection_buffer *cb, char **message, char delimiter);
 size_t queue_free_size(connection_buffer *cb);
+size_t queue_size(connection_buffer *cb);
+void queue_pop_size(connection_buffer *cb, size_t size);
+size_t queue_used_size(connection_buffer *cb);
 int queue_push(connection_buffer *cb, char *message, size_t size);
 
 #endif /* queue.h */

@@ -21,8 +21,11 @@ void queue_free(connection_buffer *cb) {
 	free(cb);
 }
 
+/* Extracts message from queue */
 size_t queue_pop(connection_buffer *cb, char **message, char delimiter) {
-	// Extract message
+	/* If the queue is empty return 0 */
+	if(!(cb->buffer_end_pointer - cb->buffer)) return 0;
+
 	char *str_end_ptr = (char *) memchr(cb->buffer, 
 										(int) delimiter, 
 										(cb->buffer_end_pointer - cb->buffer));
@@ -42,8 +45,24 @@ size_t queue_pop(connection_buffer *cb, char **message, char delimiter) {
 	return 0;
 }
 
+void queue_pop_size(connection_buffer *cb, size_t size) {
+	/* Reduce the end_pointer by the size we want to pop */
+	cb->buffer_end_pointer = cb->buffer_end_pointer - size;
+	/* If we didn't pop all the data, move it */
+	if(cb->buffer_end_pointer != cb->buffer) 
+		memmove(cb->buffer, cb->buffer + size, size);
+}
+
 size_t queue_free_size(connection_buffer *cb) {
 	return cb->buffer + cb->buffer_size - cb->buffer_end_pointer;
+}
+
+size_t queue_size(connection_buffer *cb) {
+	return cb->buffer_size;
+}
+
+size_t queue_used_size(connection_buffer *cb) {
+	return queue_size(cb) - queue_free_size(cb);
 }
 
 int queue_push(connection_buffer *cb, char *message, size_t size) {
