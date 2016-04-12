@@ -49,7 +49,7 @@ int main() {
 		asm_sha256_hash((uint8_t *) data, rand_size * 4, asm_hash);
 		sha256_hash((uint8_t *) data, rand_size * 4, c_hash);
 		if(!strcmp(c_hash, asm_hash)) {
-			printf("Hashes diferentes! C: %s\n ASM: %s \n", c_hash, asm_hash);
+			printf("Hashes diferentes! C: %s\n ASM: %s\n", c_hash, asm_hash);
 			return 0;
 		}
 	}
