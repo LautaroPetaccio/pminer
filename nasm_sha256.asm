@@ -15,15 +15,18 @@ extern _memcpy
 extern _memset
 extern _bin2hex
 
-; global _asm_sha256_transform
-; global _asm_sha256_init
-; global _asm_sha256
+global _asm_sha256d_scan
 global _asm_sha256_hash
 
 %define ctx_state_offset(position) position * 4 
 %define ctx_data_offset(position) 32 + (position * 4)
 %define SHA256_LENGTH 32
 %define SHA256_CTX_LENGTH 192
+
+; [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
+
+; [0, 0, 0, 1, 0, 2, 0, 3, 0, 4, 0, 5, 0, 6, 0, 7, 0, 8]
+; [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
 
 ; Performs a byte swap of 4 32 bit values
 ; byte_swap32x4(dst&src, tmp_xmm1, tmp_xmm2)
@@ -240,14 +243,12 @@ byte_swap32x4_SSE2 xmm1, xmm4, xmm5
 byte_swap32x4_SSE2 xmm2, xmm4, xmm5
 byte_swap32x4_SSE2 xmm3, xmm4, xmm5
 
-; Copy state to xmm0, xmm1 (ls)
+; Copy state to xmm4, xmm5 (ls)
 ; xmm4 and xmm5 become ls
 movdqu xmm4, [rdi + ctx_state_offset(0)]
 movdqu xmm5, [rdi + ctx_state_offset(4)]
 
 ; Main loop unrolled
-
-main_loop:
 
 movd r8d, xmm5
 psrldq xmm5, 4
@@ -276,12 +277,6 @@ psrldq xmm4, 4
 %assign i 0
 %rep 16
 	; Correct memory reading
-	; W extension
-	; Each W extension generates 4 new w's
-	; We have conserverd xmm0, xmm1, xmm2 and xmm3
-	; from the begging of the function to use it here
-	unrolled_w_extend xmm0, xmm1, xmm2, xmm3, xmm4, xmm5, xmm6, xmm7
-
 	movdqa xmm4, [rel k + (i * 16)]
 	paddd xmm4, xmm0
 	%assign i i+1
@@ -354,6 +349,12 @@ psrldq xmm4, 4
 		; Add t1_1 & t2_1
 		add r12d, ecx
 	%endrep
+
+	; W extension
+	; Each W extension generates 4 new w's
+	; We have conserverd xmm0, xmm1, xmm2 and xmm3
+	; from the begging of the function to use it here
+	unrolled_w_extend xmm0, xmm1, xmm2, xmm3, xmm4, xmm5, xmm6, xmm7
 %endrep
 
 ; Rebuild to xmm0
@@ -380,16 +381,13 @@ movd xmm2, r11d
 pslldq xmm2, 12
 por xmm1, xmm2
 
-; Copy local state to state
-; Adds the result to the state
-shit_has_been_done:
-nop
 ; Get the state data again
 movdqu xmm4, [rdi + ctx_state_offset(0)]
 movdqu xmm5, [rdi + ctx_state_offset(4)]
 ; Sum the local with the ctx state data
 paddd xmm0, xmm4
 paddd xmm1, xmm5
+
 ; Store the new ctx data
 movdqu [rdi + ctx_state_offset(0)], xmm0
 movdqu [rdi + ctx_state_offset(4)], xmm1
@@ -411,15 +409,16 @@ movdqu [rdi + ctx_state_offset(0)], xmm0
 movdqu [rdi + ctx_state_offset(4)], xmm1
 ret
 
+; asm_sha256 -> sha256_ctx *context, const uint8_t *data, const size_t length
 _asm_sha256:
 push rbp
 mov rbp, rsp
-sub rsp, 8
 push rbx
 push r12
 push r13
 push r14
 push r15
+sub rsp, 8d
 
 ; rbx => sha256_ctx *context
 ; r12 => uint8_t *data
@@ -445,11 +444,14 @@ sub r14, r15
 ;bytes_left < 56
 cmp r14, 56d
 jnl .bytesLeftBetween57And64
-add r15, r14
+; memcpy((uint8_t *) context->data, data + bytes_hashed, bytes_left);
 lea rdi, [rbx + ctx_data_offset(0)]
-mov rsi, r12
+lea rsi, [r12 + r15]
+; bytes_hashed += bytes_left;
+add r15, r14
 mov rdx, r14
 call _memcpy
+
 lea rdi, [rbx + ctx_data_offset(0) + r14]
 ; Add bytes left
 ;add rdi, r14
@@ -457,7 +459,7 @@ lea rsi, [rel padding]
 mov rdx, 56d
 sub rdx, r14
 call _memcpy
-lea rdi, [rbx + ctx_state_offset(0) + 56]
+lea rdi, [rbx + ctx_data_offset(0) + 56]
 ; be_bit_length
 mov rax, r15
 mov rcx, 8d
@@ -467,6 +469,7 @@ mov [rbp - 8], rax
 lea rsi, [rbp-8]
 mov rdx, 8d
 call _memcpy
+
 mov rdi, rbx
 call _asm_sha256_transform
 jmp .hashedCicle
@@ -474,9 +477,11 @@ jmp .hashedCicle
 .bytesLeftBetween57And64:
 cmp r14, 64d
 jnle .bytesLeftGreaterThan64
-add r15, r14
+; memcpy((uint8_t *) context->data, data + bytes_hashed, bytes_left);
 lea rdi, [rbx + ctx_data_offset(0)]
-mov rsi, r12
+lea rsi, [r12 + r15]
+; bytes_hashed += bytes_left;
+add r15, r14
 mov rdx, r14
 call _memcpy
 
@@ -495,6 +500,7 @@ lea rdi, [rbx + ctx_data_offset(0)]
 mov rsi, 0d
 mov rdx, 56d
 call _memset
+jmp .writeLength
 
 .justPadd:
 lea rdi, [rbx + ctx_data_offset(0)]
@@ -502,6 +508,7 @@ lea rsi, [rel padding]
 mov rdx, 56d
 call _memcpy
 
+.writeLength:
 lea rdi, [rbx + ctx_data_offset(0) + 56]
 ; be_bit_length
 mov rax, r15
@@ -518,10 +525,15 @@ call _asm_sha256_transform
 jmp .hashedCicle
 
 .bytesLeftGreaterThan64:
-add r15, 64d
+; memcpy((uint8_t *) context->data, data + bytes_hashed, 64);
 lea rdi, [rbx + ctx_data_offset(0)]
-mov rsi, r12
+lea rsi, [r12 + r15]
+; bytes_hashed += bytes_left;
+add r15, 64d
 mov rdx, 64d
+call _memcpy
+
+mov rdi, rbx
 call _asm_sha256_transform
 jmp .hashedCicle
 
@@ -534,39 +546,298 @@ byte_swap32x4_SSE2 xmm1, xmm2, xmm3
 movdqu [rbx + ctx_state_offset(0)], xmm0
 movdqu [rbx + ctx_state_offset(4)], xmm1
 
+add rsp, 8d
 pop r15
 pop r14
 pop r13
 pop r12	
 pop rbx
-add rsp, 8
 pop rbp
 ret
 
+;(const uint8_t *data, const size_t length, char *hash)
 _asm_sha256_hash:
 push rbp
 mov rbp, rsp
 push rbx
 push r12
 push r13
-; Align stack
-sub rsp, 8d
 ; Create local ctx context
 sub rsp, SHA256_CTX_LENGTH
+; Align stack
+sub rsp, 8d
+
+; RBX -> data
 mov rbx, rdi
+; R12 -> length
 mov r12, rsi
+; R13 -> hash
 mov r13, rdx
-lea rdi, [rbp - SHA256_CTX_LENGTH - 8]
+
+lea rdi, [rbp - SHA256_CTX_LENGTH]
 call _asm_sha256_init
-lea rdi, [rbp - SHA256_CTX_LENGTH - 8]
+
+; sha256_ctx *context, const uint8_t *data, const size_t length
+lea rdi, [rbp - SHA256_CTX_LENGTH]
 mov rsi, rbx
 mov rdx, r12
 call _asm_sha256
+
 ; Call _bin2hex
-mov rdi, rdx
-lea rdi, [rbp - SHA256_CTX_LENGTH - 8 + ctx_state_offset(0)]
+mov rdi, r13
+lea rsi, [rbp - SHA256_CTX_LENGTH]
 mov rdx, SHA256_LENGTH
+call _bin2hex
+
 add rsp, SHA256_CTX_LENGTH + 8
+pop r13
+pop r12
+pop rbx
+pop rbp
+ret
+
+; sha256d_scan(uint32_t *fst_state, uint32_t *snd_state, const uint32_t *data, uint32_t *lw)
+_asm_sha256d_scan:
+push rbx
+push r12
+push r13
+push r14
+sub rsp, 8
+mov rbx, rdi
+mov r12, rsi
+mov r13, rdx
+mov r14, rcx
+call _asm_sha256_init
+; Convert 64 bytes of data to big endian
+movdqu xmm0, [r13]
+movdqu xmm1, [r13 + 16]
+movdqu xmm2, [r13 + 32]
+movdqu xmm3, [r13 + 48]
+byte_swap32x4_SSE2 xmm0, xmm4, xmm5
+byte_swap32x4_SSE2 xmm1, xmm4, xmm5
+byte_swap32x4_SSE2 xmm2, xmm4, xmm5
+byte_swap32x4_SSE2 xmm3, xmm4, xmm5
+movdqu [r14], xmm0
+movdqu [r14 + 16], xmm1
+movdqu [r14 + 32], xmm2
+movdqu [r14 + 48], xmm3
+; Calls transform
+mov rdi, rbx
+mov rsi, r14
+call _asm_sha256_transform_scan
+; Convert 16 bytes of data to big endian
+movdqu xmm0, [r13 + 64]
+movdqu xmm1, [r13 + 80]
+movdqu xmm2, [r13 + 96]
+movdqu xmm3, [r13 + 112]
+byte_swap32x4_SSE2 xmm0, xmm4, xmm5
+movdqu [r14], xmm0
+movdqu [r14 + 16], xmm1
+movdqu [r14 + 32], xmm2
+movdqu [r14 + 48], xmm3
+; Calls transform
+mov rdi, rbx
+mov rsi, r14
+call _asm_sha256_transform_scan
+; Converts to big endian the resulting hash
+; movdqu xmm0, [rbx]
+; movdqu xmm1, [rbx + 16]
+; byte_swap32x4_SSE2 xmm0, xmm2, xmm3
+; byte_swap32x4_SSE2 xmm1, xmm2, xmm3
+; movdqu [rbx], xmm0
+; movdqu [rbx + 16], xmm1
+
+; Hashing the previous hash
+
+; Inicializing the second state
+mov rdi, r12
+call _asm_sha256_init
+; Convert 32 bytes of data to big endian
+mov rdi, r12
+mov rsi, rbx
+call _asm_sha256_transform_scan
+; Converts to big endian the resulting hash
+movdqu xmm0, [r12]
+movdqu xmm1, [r12 + 16]
+byte_swap32x4_SSE2 xmm0, xmm2, xmm3
+byte_swap32x4_SSE2 xmm1, xmm2, xmm3
+movdqu [r12], xmm0
+movdqu [r12 + 16], xmm1
+add rsp, 8d
+pop r14
+pop r13
+pop r12
+pop rbx
+ret
+
+; _asm_sha256_transform_scan(uint32_t *state, const uint32_t *data)
+_asm_sha256_transform_scan:
+push rbp
+mov rbp, rsp
+push rbx
+push r12
+push r13
+push r14
+push r15
+
+; Copies 16 32bits uint and transforms them into big endian
+; lea rdi, [rel ctx_data]
+movdqu xmm0, [rsi]
+movdqu xmm1, [rsi + 16]
+movdqu xmm2, [rsi + 32]
+movdqu xmm3, [rsi + 48]
+
+; Copy state to xmm4, xmm5 (ls)
+; xmm4 and xmm5 become ls
+movdqu xmm4, [rdi]
+movdqu xmm5, [rdi + 16]
+
+; Main loop unrolled
+
+movd r8d, xmm5
+psrldq xmm5, 4
+
+movd r9d, xmm5
+psrldq xmm5, 4
+
+movd r10d, xmm5
+psrldq xmm5, 4
+
+movd r11d, xmm5
+psrldq xmm5, 4
+
+movd r12d, xmm4
+psrldq xmm4, 4
+
+movd r13d, xmm4
+psrldq xmm4, 4
+
+movd r14d, xmm4
+psrldq xmm4, 4
+
+movd r15d, xmm4
+psrldq xmm4, 4
+
+%assign i 0
+%rep 16
+	; Correct memory reading
+	movdqa xmm4, [rel k + (i * 16)]
+	paddd xmm4, xmm0
+	%assign i i+1
+	%rep 4
+		; rcx => Holds t1
+		; rbx
+		; rax
+		; rdx
+		; rdi/
+		; rsi
+
+		; r12d => ls[0]
+		; r13d => ls[1]
+		; r14d => ls[2]
+		; r15d => ls[3]
+		; r8d => ls[4]
+		; r9d => ls[5]
+		; r10d => ls[6]
+		; r11d => ls[7]
+
+		; ECX will hold t1
+
+		; Starts with r[7] in ecx
+		mov ecx, r11d
+		; Put k[i] + w[i] in eax
+		movd eax, xmm4
+		psrldq xmm4, 4
+		; Ads k[i] to ecx
+		; add ecx, eax
+		; Put w[i] in eax
+		; movd eax, xmm0
+		; psrldq xmm0, 4
+		; Adds k[i] + w[i] to ecx
+		add ecx, eax
+		; Mov l[4]
+		mov edx, r8d 
+		; Do S1
+		S1 edx, eax, esi
+		; Adds S1 to ecx
+		add ecx, edx
+		; Do CH
+		mov edx, r8d
+		mov esi, r9d
+		mov eax, r10d
+		CH edx, esi, eax
+		; Adds the result of Ch to ecx and obtains t1
+		add ecx, edx
+
+		; t1 completed, move the last 8 bytes
+		mov r11d, r10d
+		mov r10d, r9d
+		mov r9d, r8d
+		mov r8d, r15d
+		; ls[4] = ls[3] + t1
+		add r8d, ecx
+
+		; Now to the other half part
+		; Mov each integer
+		mov r15d, r14d
+		mov r14d, r13d
+		mov r13d, r12d
+		; r12d will hold t2
+		S0 r12d, eax, edx
+		mov ebx, r13d
+		mov eax, r14d
+		mov edx, r15d
+		Maj ebx, eax, edx, esi
+		add r12d, ebx
+		; We have now t2_1 in r12d
+		; Add t1_1 & t2_1
+		add r12d, ecx
+	%endrep
+
+	; W extension
+	; Each W extension generates 4 new w's
+	; We have conserverd xmm0, xmm1, xmm2 and xmm3
+	; from the begging of the function to use it here
+	unrolled_w_extend xmm0, xmm1, xmm2, xmm3, xmm4, xmm5, xmm6, xmm7
+%endrep
+
+; Rebuild to xmm0
+movd xmm0, r12d
+movd xmm1, r13d
+pslldq xmm1, 4
+por xmm0, xmm1
+movd xmm1, r14d
+pslldq xmm1, 8
+por xmm0, xmm1
+movd xmm1, r15d
+pslldq xmm1, 12
+por xmm0, xmm1
+
+; Rebuild to xmm1
+movd xmm1, r8d
+movd xmm2, r9d
+pslldq xmm2, 4
+por xmm1, xmm2
+movd xmm2, r10d
+pslldq xmm2, 8
+por xmm1, xmm2
+movd xmm2, r11d
+pslldq xmm2, 12
+por xmm1, xmm2
+
+; Get the state data again
+movdqu xmm4, [rdi]
+movdqu xmm5, [rdi + 16]
+; Sum the local with the ctx state data
+paddd xmm0, xmm4
+paddd xmm1, xmm5
+
+; Store the new ctx data
+movdqu [rdi], xmm0
+movdqu [rdi + 16], xmm1
+
+pop r15
+pop r14
 pop r13
 pop r12
 pop rbx
