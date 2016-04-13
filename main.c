@@ -75,9 +75,8 @@ int main(int argc, char **argv) {
     printf("Got message: \n %s \n", message);
 		/* Nothing to read */
 		if(message_received_size == 0) {
-      printf("Size del mensaje 0, que anda pasandooo \n");
+      printf("Server timed out \n");
       break;
-      continue;
     }
 		/* Process message */
 		json_error_t *decode_error = NULL;
@@ -164,10 +163,10 @@ int main(int argc, char **argv) {
         printf("Message from the server \n %s \n", json_string_value(val));
       }
       else if(!strcmp(json_string_value(method), "client.get_version")) {
-        // Envio los datos de mi version
+        stratum_client_version(connection, json_obj);
       }
       else if(!strcmp(json_string_value(method), "client.reconnect")) {
-        printf("The server asked for a reconnection, exit everything, fuck that server \n");
+        printf("The server asked for a reconnection, exiting \n");
         run = false;
       }
 		}
