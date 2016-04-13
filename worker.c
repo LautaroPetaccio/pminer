@@ -62,17 +62,7 @@ void *worker_thread(void *arg) {
 		// sha256d_scan(fst_state, hash_result, work.data, w);
 		asm_sha256d_scan(fst_state, hash_result, work.data, w);
 		if(hash_result[7] < work.target[7]) {
-			printf("Encontro algo![7][7], viva la pepa -------------------------------------\n");
-			if(fulltest(hash_result, work.target))
-				stratum_submit_share(worker_data->connection, worker_data->context, &work);
-		}
-		if(hash_result[0] < work.target[7]) {
-			printf("Encontro algo [0][7]!, viva la pepa -------------------------------------\n");
-			if(fulltest(hash_result, work.target))
-				stratum_submit_share(worker_data->connection, worker_data->context, &work);
-		}
-		if(hash_result[0] < work.target[0]) {
-			printf("Encontro algo[0][0]!, viva la pepa -------------------------------------\n");
+			printf("Share found, queueing for send \n");
 			if(fulltest(hash_result, work.target))
 				stratum_submit_share(worker_data->connection, worker_data->context, &work);
 		}
