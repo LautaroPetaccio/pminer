@@ -23,11 +23,6 @@ global _asm_sha256_hash
 %define SHA256_LENGTH 32
 %define SHA256_CTX_LENGTH 192
 
-; [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
-
-; [0, 0, 0, 1, 0, 2, 0, 3, 0, 4, 0, 5, 0, 6, 0, 7, 0, 8]
-; [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
-
 ; Performs a byte swap of 4 32 bit values
 ; byte_swap32x4(dst&src, tmp_xmm1, tmp_xmm2)
 %macro byte_swap32x4_SSE2 3
@@ -185,42 +180,6 @@ global _asm_sha256_hash
 	paddd %4, %5
 %endmacro
 
-
-; _main:
-; push rbp
-; mov rbp, rsp
-
-; ; lea rdi, [rel hello_world]
-; ; call _printf
-
-; lea rdi, [rel ctx_state]
-; call _sha256_init
-
-; lea rdi, [rel initial_state]
-
-; call _sha256_transform
-; ; lea rdi, [rel sha256_init_text]
-; ; lea rsi, [rel w]
-; ; mov esi, [rsi]
-; ; lea rdx, [rel w + 4]
-; ; mov edx, [rdx]
-; ; lea rcx, [rel w + 8]
-; ; mov ecx, [rcx]
-; ; lea r8, [rel w + 12]
-; ; mov r8d, [r8]
-; ; call _printf
-; ;mov rax, 0x2000004      ; System call write = 4
-; ;mov rdi, 1              ; Write to standard out = 1
-; ;mov rsi, hello_world    ; The address of hello_world string
-; ;mov rdx, 14             ; The size to write
-; 		                ; Invoke the kernel
-; mov rax, 0x2000001      ; System call number for exit = 1
-; mov rdi, 0              ; Exit success = 0
-
-; pop rbp
-; syscall                 ; Invoke the kernel
-
-
 ; Recieves a ctx struct in RDI
 _asm_sha256_transform:
 push rbp
@@ -304,11 +263,6 @@ psrldq xmm4, 4
 		; Put k[i] + w[i] in eax
 		movd eax, xmm4
 		psrldq xmm4, 4
-		; Ads k[i] to ecx
-		; add ecx, eax
-		; Put w[i] in eax
-		; movd eax, xmm0
-		; psrldq xmm0, 4
 		; Adds k[i] + w[i] to ecx
 		add ecx, eax
 		; Mov l[4]
@@ -639,15 +593,6 @@ movdqu [r14 + 48], xmm3
 mov rdi, rbx
 mov rsi, r14
 call _asm_sha256_transform_scan
-; Converts to big endian the resulting hash
-; movdqu xmm0, [rbx]
-; movdqu xmm1, [rbx + 16]
-; byte_swap32x4_SSE2 xmm0, xmm2, xmm3
-; byte_swap32x4_SSE2 xmm1, xmm2, xmm3
-; movdqu [rbx], xmm0
-; movdqu [rbx + 16], xmm1
-
-; Hashing the previous hash
 
 ; Inicializing the second state
 mov rdi, r12
