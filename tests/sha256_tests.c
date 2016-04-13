@@ -97,6 +97,11 @@ static void test_with_other_source(void **state) {
 		"Curabitur maximus dictum condimentum.",
 		"Nulla gravida maximus velit, eu sodales mi pretium non. Fusce malesuada accumsan tortor in venenatis.",
 		};
+	char *shad_result[3] = {
+		"6a7c126d622bcbb107ddf5f828730077872a2f4cfaabe2398847bd3a0ecb324a",
+		"fa02ceca513217dcbe7e22ce2a1788a3b1a6458b9499a8b3ceaa734fc8ac5b26",
+		"5d5c1179eb47ee31a279030b110add437c964b845cdab7b7b8ba8be95235ffcb",
+		};
 	for (int i = 0; i < 3; ++i) {
 		sha256_hash((uint8_t *) data[i], strlen(data[i]), hash);
 		assert_string_equal(hash, results[i]);
@@ -104,6 +109,10 @@ static void test_with_other_source(void **state) {
 		memset(hash, 0, 65);
 		asm_sha256_hash((uint8_t *) data[i], strlen(data[i]), hash);
 		assert_string_equal(hash, results[i]);
+		memset(hash, 0, 65);
+		sha256d_hash_be((uint8_t *) data[i], strlen(data[i]), hash);
+		// sha256_hash((uint8_t *) results[i], strlen(results[i]), hash);
+		assert_string_equal(hash, shad_result[i]);
 	}
 }
 
