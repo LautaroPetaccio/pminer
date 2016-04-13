@@ -81,6 +81,7 @@ void stratum_submit_share(struct stratum_connection *connection,
 void stratum_authorize(struct stratum_connection *connection,
 	const char *user, const char *password);
 void stratum_subscribe(struct stratum_connection *connection);
+void stratum_client_version(struct stratum_connection *connection, json_t *json_obj);
 
 /* Receivers */
 void stratum_load_subscription(struct stratum_context *context, json_t *json_message);

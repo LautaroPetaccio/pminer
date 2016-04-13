@@ -170,12 +170,8 @@ void stratum_generate_new_work(struct stratum_context *context, struct work* wor
 		free(work->job_id);
 	work->job_id = strdup(context->job.job_id);
 	work->nonce2_size = context->nonce2_size;
-	// work->coinbase_size = context->job.coinbase_size;
 	work->nonce2 = realloc(work->nonce2, context->nonce2_size);
-	// work->coinbase = realloc(work->coinbase, work->coinbase_size);
-	// memcpy(work->coinbase, context->job.coinbase, work->coinbase_size);
 	memcpy(work->nonce2, context->job.nonce2, context->nonce2_size);
-	// work->nonce2 = work->coinbase + context->job.coinb1_size + context->nonce1_size;
 
 	////////////////////////////////////////////////
 	//       Transaction header creation          //
