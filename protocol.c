@@ -1,21 +1,5 @@
 #include "protocol.h"
 
-void diff_to_target(uint32_t *target, double diff) {
-	uint64_t m;
-	int k;
-	
-	for (k = 6; k > 0 && diff > 1.0; k--)
-		diff /= 4294967296.0;
-	m = 4294901760.0 / diff;
-	if (m == 0 && k == 6)
-		memset(target, 0xff, 32);
-	else {
-		memset(target, 0, 32);
-		target[k] = (uint32_t)m;
-		target[k + 1] = (uint32_t)(m >> 32);
-	}
-}
-
 int sock(char *ip, char *port) {
 	int sockfd, portno;
 	struct sockaddr_in serv_addr;
@@ -57,8 +41,6 @@ struct stratum_context* create_stratum_context() {
 		struct stratum_context *context = 
 		(struct stratum_context*) malloc(sizeof(struct stratum_context));
 		context->user = NULL;
-		// context->subscription_id = NULL;
-		// context->notification_id = NULL;
 		context->session_id = NULL;
 		context->nonce1 = NULL;
 		context->job.job_id = NULL;
@@ -142,9 +124,9 @@ size_t get_message(struct stratum_connection* connection, char **message) {
 
 void destruct_stratum_context(struct stratum_context *context) {
 	if(context->session_id) free(context->session_id);
-	//if(connection->notification_id) free(connection->subscription_id);
 	if(context->nonce1) free(context->nonce1);
 	if(context->job.coinbase) free(context->job.coinbase);
+	if(context->job.job_id) free(context->job.job_id);
 	for (int i = 0; i < context->job.merkle_count; i++)
 		free(context->job.merkle[i]);
 	if(context->job.merkle) free(context->job.merkle);
@@ -164,7 +146,7 @@ void destruct_stratum_connection(struct stratum_connection *connection) {
 
 void stratum_generate_new_work(struct stratum_context *context, struct work* work) {
 	pthread_mutex_lock(&context->context_mutex);
-	uint8_t merkle_root[65];
+	uint8_t merkle_root[64];
 	/* Copy the coinbase to the work */
 	if(work->job_id)
 		free(work->job_id);
@@ -192,16 +174,14 @@ void stratum_generate_new_work(struct stratum_context *context, struct work* wor
 		sha256d(merkle_root, 64, merkle_root);
 	}
 	/* Increment extranonce2 to have different works */
-	for (int i = 0; i < context->nonce2_size && !++context->job.nonce2[i]; i++);
 	/* Assemble block header */
 	memset(work->data, 0, 128);
 	/* Version */
-	// work->data[0] = swap_uint32(*((uint32_t *) context->job.version));
 	work->data[0] = le32dec(context->job.version);
 	/* hashPrevBlock */
 	for(int i = 0; i < 8; i++)
-		// work->data[1 + i] = swap_uint32(*((uint32_t *) context->job.prevhash + i));
 		work->data[1 + i] = le32dec((uint32_t *)context->job.prevhash + i);
+
 	/* hashMerkleRoot */
 	for(int i = 0; i < 8; i++)
 		// work->data[9 + i] = swap_uint32(*((uint32_t *) merkle_root + i));
@@ -244,7 +224,6 @@ void stratum_subscribe(struct stratum_connection *connection) {
 	json_array_append_new(params_array, json_string("Pminer/0.1"));
 	json_object_set_new(root, "params", params_array);
 	char *res_string = json_dumps(root, JSON_ENCODE_ANY | JSON_PRESERVE_ORDER);
-	// printf("String to be sent: \n%s\n", res_string);
 	size_t res_string_length = strlen(res_string);
 	//Converts endstring character to newline to be read by the stratum server
 	res_string[res_string_length] = '\n';
@@ -255,7 +234,6 @@ void stratum_subscribe(struct stratum_connection *connection) {
 	free(res_string);
 	json_decref(root);
 	/* Not thread safe */
-	// printf("Connection request sent \n");
 }
 
 void stratum_client_version(struct stratum_connection *connection, json_t *json_obj) {
@@ -305,16 +283,17 @@ void stratum_load_subscription(struct stratum_context *context, json_t *json_mes
 			}
 		}
 	}
-	if(!context->session_id) exit(0);
-	printf("Session id: %s \n", context->session_id);
+	if(!context->session_id) exit(1);
 
-	/* Storing extranonce 1 */
-	size_t nonce1_size = strlen(json_string_value(json_array_get(result, 1)))/2;
-	context->nonce1 = realloc(context->nonce1, nonce1_size * sizeof(char));
-	hex2bin(context->nonce1, json_string_value(json_array_get(result, 1)), nonce1_size);
-	// printf("Storing nonce 1\n");
+	/* Getting the extranonce1 size */
+	context->nonce1_size = strlen(json_string_value(json_array_get(result, 1)))/2;
+
+	/* Storing the extranonce1 */
+	context->nonce1 = realloc(context->nonce1, context->nonce1_size * sizeof(char));
+	hex2bin(context->nonce1, json_string_value(json_array_get(result, 1)), context->nonce1_size);
+
+	/* Getting the extranonce2 size from the subscription */
 	context->nonce2_size = json_integer_value(json_array_get(result, 2));
-	printf("End storing subscription details \n");
 }
 
 void stratum_authorize(struct stratum_connection *connection,
@@ -338,19 +317,17 @@ void stratum_authorize(struct stratum_connection *connection,
 	pthread_mutex_unlock(&connection->send_queue_mutex);
 	json_decref(root);
 	free(res_string);
-	// printf("Subscription request sent \n");
 }
 
 void stratum_submit_share(struct stratum_connection *connection, 
 	struct stratum_context *context,  struct work *work) {
 	uint32_t ntime, nonce;
 	char time_string[9], nonce_string[9], nonce2_string[(context->nonce2_size * 2) + 1];
-	// Converts to little endian?
-	ntime = swap_uint32(work->data[17]);
-	nonce = swap_uint32(work->data[19]);
+	le32enc(&ntime, work->data[17]);
+	le32enc(&nonce, work->data[19]);
 	bin2hex(time_string, (const unsigned char *) (&ntime), 4);
 	bin2hex(nonce_string, (const unsigned char *) (&nonce), 4);
-	bin2hex(nonce2_string,(const unsigned char *) (&work->nonce2), work->nonce2_size);
+	bin2hex(nonce2_string,(const unsigned char *) work->nonce2, work->nonce2_size);
 
 	json_t *root = json_object();
 	json_t *params = json_array();
@@ -393,7 +370,6 @@ void stratum_notify(struct stratum_context *context, json_t *json_obj) {
 	/* coinb2 - Final part of coinbase transaction. */
 	json_t *coinb2 = json_array_get(params, 3);
 	size_t coinb1_size = strlen(json_string_value(coinb1)) / 2;
-	context->job.coinb1_size = coinb1_size; // Temporary
 	size_t coinb2_size = strlen(json_string_value(coinb2)) / 2;
 	/* Total coinbase size */
 	context->job.coinbase_size = coinb1_size + context->nonce1_size + 
@@ -426,16 +402,19 @@ void stratum_notify(struct stratum_context *context, json_t *json_obj) {
 	/* Copies the coinbase2 next to the nonce2 */
 	hex2bin(context->job.nonce2 + context->nonce2_size, 
 		json_string_value(coinb2), coinb2_size);
-	/*
-		Deletes old merkle hashes
-	*/
+
+	////////////////////////////////////////////////
+	// 		   End coinbase building			  //
+	////////////////////////////////////////////////
+
+	////////////////////////////////////////////////
+	//         Start merkle tree building         //
+	////////////////////////////////////////////////
+
+	/* Deletes old merkle hashes */
 	for (int i = 0; i < context->job.merkle_count; i++)
 		free(context->job.merkle[i]);
-	/*
-		Stores hashes used to compute the merkle root
-	 	This is not a list of all transactions, it only contains
-	 		prepared hashes of steps of merkle tree algorithm.
-	*/
+	/* Stores hashes used to compute the merkle root */
 	json_t *merkle_branch = json_array_get(params, 4);
 	context->job.merkle_count = json_array_size(merkle_branch);
 	/* Creates the array of pointers that will hold the hashes */
@@ -447,16 +426,15 @@ void stratum_notify(struct stratum_context *context, json_t *json_obj) {
 		json_t *merkle_hash = json_array_get(merkle_branch, i);
 		hex2bin(context->job.merkle[i], json_string_value(merkle_hash), 32);
 	}
+
 	////////////////////////////////////////////////
-	// 		   End coinbase building			  //
+	//          End merkle tree building          //
 	////////////////////////////////////////////////
 
 	/* version - Bitcoin block version.*/
 	json_t *version = json_array_get(params, 5);
-	// printf("Got version %s \n", json_string_value(version));
 	/* nbits - Encoded current network difficulty */
 	json_t *nbits = json_array_get(params, 6);
-	// printf("Got nbits %s \n", json_string_value(nbits));
 	/* ntime - Current ntime */
 	json_t *ntime = json_array_get(params, 7);
 	hex2bin(context->job.version, (const char *) json_string_value(version), 4);

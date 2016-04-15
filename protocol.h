@@ -18,6 +18,20 @@
 
 typedef enum {SUBS_SENT, AUTH_SENT, AUTHORIZED} stratum_state;
 
+typedef struct block_header {
+        unsigned int    version;
+        // dont let the "char" fool you, this is binary data not the human readable version
+        uint32_t prev_block[8];
+        uint32_t merkle_root[8];
+        // unsigned char   prev_block[32];
+        // unsigned char   merkle_root[32];
+        unsigned int    timestamp;
+        unsigned int    bits;
+        unsigned int    nonce;
+        uint32_t padding[12];
+} block_header;
+ 
+
 struct work {
 	uint32_t data[32];
 	uint32_t target[8];
@@ -32,8 +46,6 @@ struct stratum_job {
 	char *job_id;
 	unsigned char prevhash[32];
 	size_t coinbase_size;
-	// Temporary
-	size_t coinb1_size;
 	unsigned char *coinbase;
 	unsigned char *nonce2;
 	size_t merkle_count;
