@@ -40,7 +40,7 @@ static uint8_t sha256_padding[64] = {
 };
 
 /* Initiate the sha256 state that will hold our binary hash */
-static void sha256_init(sha256_ctx *ctx) {
+void sha256_init(sha256_ctx *ctx) {
 	/* Using memcpy as a faster way to copy the initial state */
 	memcpy(ctx->state, initial_state, 32);
 }
@@ -156,7 +156,7 @@ static void sha256_transform_scan(uint32_t *state, const uint32_t *data, uint32_
 
 }
 
-static void sha256(sha256_ctx *context, const uint8_t *data, const size_t length) {
+void sha256(sha256_ctx *context, const uint8_t *data, const size_t length) {
 	if(length == 0) return;
 	uint32_t bytes_left, bytes_hashed = 0;
 	/* Processes data to be hashed */
@@ -216,6 +216,9 @@ void sha256d(const uint8_t *data, const size_t length, uint8_t *hash) {
 	sha256_init(&first_context);
 	sha256(&first_context, data, length);
 	/* Second hash */
+	// for(int i=0; i < 8; i++) {
+	// 	printf("first_context.state[%i] = %08x\n", i, first_context.state[i]);
+	// }
 	sha256_init(&second_context);
 	sha256(&second_context, (uint8_t *) first_context.state, SHA256_LENGTH);
 	memcpy(hash, second_context.state, SHA256_LENGTH);
@@ -248,14 +251,11 @@ void sha256_hash(const uint8_t *data, const size_t length, char *hash) {
 void sha256d_scan(uint32_t *fst_state, uint32_t *snd_state, const uint32_t *data, uint32_t *lw) {
 	/* First hash */
 	sha256_init_scan(fst_state);
-	sha256_transform_scan(fst_state, data, lw, 64);
-	sha256_transform_scan(fst_state, data + 16, lw, 16);
-	for (int i = 0; i < 8; ++i) {
-		fst_state[i] = swap_uint32(fst_state[i]);
-	}
+	sha256_transform_scan(fst_state, data, lw, 0);
+	sha256_transform_scan(fst_state, data + 16, lw, 0);
 	/* Second hash */
 	sha256_init_scan(snd_state);
-	sha256_transform_scan(snd_state, fst_state, lw, 32);
+	sha256_transform_scan(snd_state, fst_state, lw, 0);
 	/* Converts result to big endian */
 	for (int i = 0; i < 8; ++i) {
 		snd_state[i] = swap_uint32(snd_state[i]);

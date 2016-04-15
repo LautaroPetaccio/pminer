@@ -10,7 +10,6 @@ section .bss align=16
 
 section .text
 
-extern _printf
 extern _memcpy
 extern _memset
 extern _bin2hex
@@ -113,7 +112,6 @@ global _asm_sha256_hash
 	xmm_rotate %2, %3, 7
 	movdqa %3, %1
 	xmm_rotate %3, %4, 18
-	; LOOK INTO ARITMETHIC AND LOGICAL SHIFTS IF THEY BEHAVE THE SAME IN THE C CODE
 	psrld %1, 3
 	pxor %1, %2
 	pxor %1, %3
@@ -124,7 +122,6 @@ global _asm_sha256_hash
 	xmm_rotate %2, %3, 17
 	movdqa %3, %1
 	xmm_rotate %3, %4, 19
-	; LOOK INTO ARITMETHIC AND LOGICAL SHIFTS IF THEY BEHAVE THE SAME IN THE C CODE
 	psrld %1, 10
 	pxor %1, %2
 	pxor %1, %3
@@ -150,9 +147,6 @@ global _asm_sha256_hash
 	pslldq %7, 12
 	psrldq %6, 4
 	por %6, %7
-
-	; Push the 4 first ints and shift
-	; movdqa [%1], %1
 	; add %1, 16d ; push the mem pointer to the next place in memory
 	movdqa %1, %2
 	movdqa %2, %3
@@ -163,7 +157,6 @@ global _asm_sha256_hash
 	paddd %4, %6
 	; Apply S1 to the two 2's we have
 	movdqa %5, %3
-	;pand xmm4, 0000000000000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 	psrldq %5, 8
 	xmm_s1 %5, %6, %7, %8
 	; Adding the two 2's to xmm3 will result in the higher double word
@@ -175,7 +168,6 @@ global _asm_sha256_hash
 	movdqa %5, %4
 	pslldq %5, 8
 	; Coping xmm3 altogether isn't better? then shifting
-	; LOOK IF THIS DOUBLE WORDS HAVE THE OTHER DOUBLE WORDS IN 0 WHEN WE ADD THEM
 	xmm_s1 %5, %6, %7, %8
 	paddd %4, %5
 %endmacro
@@ -550,66 +542,38 @@ pop rbx
 pop rbp
 ret
 
-; sha256d_scan(uint32_t *fst_state, uint32_t *snd_state, const uint32_t *data, uint32_t *lw)
+; sha256d_scan(uint32_t *fst_state, uint32_t *snd_state, const uint32_t *data)
 _asm_sha256d_scan:
 push rbx
 push r12
 push r13
-push r14
-sub rsp, 8
 mov rbx, rdi
 mov r12, rsi
 mov r13, rdx
-mov r14, rcx
 call _asm_sha256_init
-; Convert 64 bytes of data to big endian
-movdqu xmm0, [r13]
-movdqu xmm1, [r13 + 16]
-movdqu xmm2, [r13 + 32]
-movdqu xmm3, [r13 + 48]
-byte_swap32x4_SSE2 xmm0, xmm4, xmm5
-byte_swap32x4_SSE2 xmm1, xmm4, xmm5
-byte_swap32x4_SSE2 xmm2, xmm4, xmm5
-byte_swap32x4_SSE2 xmm3, xmm4, xmm5
-movdqu [r14], xmm0
-movdqu [r14 + 16], xmm1
-movdqu [r14 + 32], xmm2
-movdqu [r14 + 48], xmm3
 ; Calls transform
 mov rdi, rbx
-mov rsi, r14
+mov rsi, r13
 call _asm_sha256_transform_scan
-; Convert 16 bytes of data to big endian
-movdqu xmm0, [r13 + 64]
-movdqu xmm1, [r13 + 80]
-movdqu xmm2, [r13 + 96]
-movdqu xmm3, [r13 + 112]
-byte_swap32x4_SSE2 xmm0, xmm4, xmm5
-movdqu [r14], xmm0
-movdqu [r14 + 16], xmm1
-movdqu [r14 + 32], xmm2
-movdqu [r14 + 48], xmm3
 ; Calls transform
 mov rdi, rbx
-mov rsi, r14
+lea rsi, [r13 + 64]
 call _asm_sha256_transform_scan
 
 ; Inicializing the second state
 mov rdi, r12
 call _asm_sha256_init
-; Convert 32 bytes of data to big endian
+; Convert 32 bytes of data to little endian
 mov rdi, r12
 mov rsi, rbx
 call _asm_sha256_transform_scan
-; Converts to big endian the resulting hash
+; Converts to little endian the resulting hash
 movdqu xmm0, [r12]
 movdqu xmm1, [r12 + 16]
 byte_swap32x4_SSE2 xmm0, xmm2, xmm3
 byte_swap32x4_SSE2 xmm1, xmm2, xmm3
 movdqu [r12], xmm0
 movdqu [r12 + 16], xmm1
-add rsp, 8d
-pop r14
 pop r13
 pop r12
 pop rbx
@@ -693,11 +657,6 @@ psrldq xmm4, 4
 		; Put k[i] + w[i] in eax
 		movd eax, xmm4
 		psrldq xmm4, 4
-		; Ads k[i] to ecx
-		; add ecx, eax
-		; Put w[i] in eax
-		; movd eax, xmm0
-		; psrldq xmm0, 4
 		; Adds k[i] + w[i] to ecx
 		add ecx, eax
 		; Mov l[4]
