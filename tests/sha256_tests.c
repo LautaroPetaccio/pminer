@@ -6,6 +6,7 @@
 #include <cmocka.h>
 #include <string.h>
 #include <time.h>
+#include <openssl/sha.h>
 #include "../sha256.h"
 #include "../util.h"
 
@@ -15,7 +16,7 @@ extern void* _test_calloc(const size_t number_of_elements, const size_t size,
 extern void _test_free(void* const ptr, const char* file, const int line);
 
 extern void asm_sha256_hash(const uint8_t *data, const size_t length, char *hash);
-extern void asm_sha256d_scan(uint32_t *fst_state, uint32_t *snd_state, const uint32_t *data, uint32_t *lw);
+extern void asm_sha256d_scan(uint32_t *fst_state, uint32_t *snd_state, const uint32_t *data);
 
 #define malloc(size) _test_malloc(size, __FILE__, __LINE__)
 #define calloc(num, size) _test_calloc(num, size, __FILE__, __LINE__)
@@ -114,6 +115,39 @@ static void test_with_other_source(void **state) {
 		// sha256_hash((uint8_t *) results[i], strlen(results[i]), hash);
 		assert_string_equal(hash, shad_result[i]);
 	}
+
+	uint32_t hash1[8];
+	uint32_t hash2[8];
+	uint32_t hash3[8];	   
+	SHA256_CTX sha256_pass1, sha256_pass2;
+	sha256_ctx my_context;
+	uint32_t random_data[32];
+	srand(time(NULL));
+	for (int i = 0; i < 32; ++i) {
+		random_data[i] = rand() % 2147483647;
+	}
+
+	for (int i = 0; i < 1000; ++i) {
+		size_t size = rand() % 128;
+		if(!size) continue;
+		SHA256_Init(&sha256_pass1);
+		SHA256_Update(&sha256_pass1, (unsigned char*) random_data, size);
+		SHA256_Final((uint8_t *) hash1, &sha256_pass1);
+
+		SHA256_Init(&sha256_pass2);
+		SHA256_Update(&sha256_pass2, hash1, SHA256_DIGEST_LENGTH);
+		SHA256_Final((uint8_t *) hash2, &sha256_pass2);
+
+		sha256_init(&my_context);
+		sha256(&my_context, (unsigned char*) random_data, size);
+		for (int j = 0; j < 8; ++j) {
+			assert_int_equal(hash1[j], my_context.state[j]);
+		}
+		sha256d((unsigned char*) random_data, size, (uint8_t *) hash3);
+		for (int j = 0; j < 8; ++j) {
+			assert_int_equal(hash2[j], hash3[j]);
+		}
+	}
 }
 
 static void test_256d_little_endian(void **state) {
@@ -140,23 +174,30 @@ static void test_256d_scan(void **state) {
 		data[i] = rand() % 2147483647;
 	}
 
+	char hash_scan[65];
+	char hash_normal[65];
+	for (int i = 0; i < 32; ++i) {
+		data[i] = swap_uint32(data[i]);
+	}
+	sha256d_hash_be((uint8_t *) data, 80, hash_normal);
+	bin2hex(hash_scan, (uint8_t *) hash_result, 32);
+	for (int i = 0; i < 32; ++i) {
+		data[i] = swap_uint32(data[i]);
+	}
+
 	memset(data + 20, 0x00, 48);
 	data[20] = 0x80000000;
 	data[31] = 0x00000280;
 	fst_state[8] = 0x80000000;
 	memset(fst_state + 9, 0, 24);
 	fst_state[15] = 0x00000100;
+
 	sha256d_scan(fst_state, hash_result, data, wl);
-
-	char hash_scan[65];
-	char hash_normal[65];
-	sha256d_hash_be((uint8_t *) data, 80, hash_normal);
 	bin2hex(hash_scan, (uint8_t *) hash_result, 32);
-
 	assert_string_equal(hash_scan, hash_normal);
 
 	memset(hash_scan, 0, 65);
-	asm_sha256d_scan(fst_state, hash_result, data, wl);
+	asm_sha256d_scan(fst_state, hash_result, data);
 	bin2hex(hash_scan, (uint8_t *) hash_result, 32);
 	assert_string_equal(hash_scan, hash_normal);
 }
