@@ -2,3 +2,4 @@
 *.gch
 *.sublime-project
 *.sublime-workspace
+*.dSYM
