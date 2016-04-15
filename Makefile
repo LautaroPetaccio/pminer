@@ -20,7 +20,7 @@ all: main tests
 tests: sha256_tests queue_tests mining_test
 
 clean:
-	rm *.o *.gch tests/*.o tests/queue_tests tests/sha256_asm_tests tests/sha256_tests main analisis
+	rm *.o *.gch tests/*.o tests/queue_tests tests/sha256_asm_tests tests/sha256_tests tests/mining_test main analisis
 
 main.o: main.c
 	$(CC) $(CFLAGS) main.c
