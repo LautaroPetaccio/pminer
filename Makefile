@@ -8,7 +8,7 @@ ifeq ($(UNAME_S),Linux)
     NASM_SHA256 = nasm_sha256_linux.asm
 endif
 ifeq ($(UNAME_S),Darwin)
-    CFLAGS=-c -Wall -I/usr/local/include -O2 -g
+    CFLAGS=-c -Wall -I/usr/local/include -g
     ASMFLAGS=-f macho64
     CC +=-L/usr/local/lib
     NASM_SHA256 = nasm_sha256.asm
@@ -17,7 +17,7 @@ endif
 
 all: main tests
 
-tests: sha256_tests queue_tests
+tests: sha256_tests queue_tests mining_test
 
 clean:
 	rm *.o *.gch tests/*.o tests/queue_tests tests/sha256_asm_tests tests/sha256_tests main analisis
@@ -55,8 +55,11 @@ mining_test.o: tests/mining_test.c
 main: main.o queue.o parser.o protocol.o sha256.o util.o worker.o nasm_sha256.o
 	$(CC) main.o parser.o protocol.o queue.o sha256.o util.o worker.o nasm_sha256.o -o main -ljansson -pthread -o main
 
+mining_test: tests/mining_test.o sha256.o util.o nasm_sha256.o protocol.o queue.o
+	$(CC) -lcmocka -ljansson sha256.o util.o nasm_sha256.o protocol.o queue.o tests/mining_test.o -o tests/mining_test
+
 sha256_tests: tests/sha256_tests.o sha256.o util.o nasm_sha256.o
-	$(CC) -lcmocka sha256.o util.o nasm_sha256.o tests/sha256_tests.o -o tests/sha256_tests
+	$(CC) -lcmocka -lcrypto sha256.o util.o nasm_sha256.o tests/sha256_tests.o -o tests/sha256_tests
 
 queue_tests: tests/queue_tests.o queue.o
 	$(CC) -lcmocka queue.o tests/queue_tests.o -o tests/queue_tests
@@ -70,4 +73,3 @@ analisis.o: analisis.c
 
 nasm_sha256.o: $(NASM_SHA256)
 	$(ASM) $(ASMFLAGS) $(NASM_SHA256)
-
