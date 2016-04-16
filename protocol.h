@@ -1,5 +1,6 @@
 #ifndef _PROTOCOL_H
 #define _PROTOCOL_H
+#define h_addr h_addr_list[0]
 
 #include <stdio.h>
 #include <jansson.h>
@@ -7,6 +8,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <strings.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
