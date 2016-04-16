@@ -31,6 +31,6 @@ bool create_threads(pthread_t **thr, struct worker_data **worker_data,
 	struct stratum_context *context, unsigned int thr_ammount);
 void reset_threads(struct worker_data *worker_data, unsigned int thr_ammount);
 
-extern void asm_sha256d_scan(uint32_t *fst_state, uint32_t *snd_state, const uint32_t *data, uint32_t *lw);
+extern void asm_sha256d_scan(uint32_t *fst_state, uint32_t *snd_state, const uint32_t *data);
 
 #endif /* worker.h */

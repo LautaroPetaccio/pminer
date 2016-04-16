@@ -25,4 +25,3 @@ void sha256_init(sha256_ctx *ctx);
 void sha256(sha256_ctx *context, const uint8_t *data, const size_t length);
 
 #endif /* sha256.h */
-

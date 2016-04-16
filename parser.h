@@ -19,5 +19,3 @@ void parse_arguments(int argc, char **argv, struct arguments *arguments);
 void print_usage();
 
 #endif /* parser.h */
-
-

@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <strings.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -20,11 +21,8 @@ typedef enum {SUBS_SENT, AUTH_SENT, AUTHORIZED} stratum_state;
 
 typedef struct block_header {
         unsigned int    version;
-        // dont let the "char" fool you, this is binary data not the human readable version
         uint32_t prev_block[8];
         uint32_t merkle_root[8];
-        // unsigned char   prev_block[32];
-        // unsigned char   merkle_root[32];
         unsigned int    timestamp;
         unsigned int    bits;
         unsigned int    nonce;
@@ -35,6 +33,7 @@ typedef struct block_header {
 struct work {
 	uint32_t data[32];
 	uint32_t target[8];
+	block_header block_header;
 
 	char *job_id;
 
