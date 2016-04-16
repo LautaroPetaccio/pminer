@@ -261,8 +261,8 @@ void stratum_load_subscription(struct stratum_context *context, json_t *json_mes
 		context->session_id = NULL;
 	}
 	/* Gets result first element */
-	size_t index_one, index_two;
-	json_t *value_one, *value_two, *notify;
+	size_t index_one, index_two, index_three;
+	json_t *value_one, *value_two, *value_three, *notify;
 	json_array_foreach(result, index_one, value_one) {
 		if(json_is_string(value_one)) {
 			if(!strcmp("mining.notify", json_string_value(value_one))) {
@@ -280,11 +280,24 @@ void stratum_load_subscription(struct stratum_context *context, json_t *json_mes
 						break;
 					}
 				}
+				else if(json_is_array(value_two)) {
+					json_array_foreach(value_two, index_three, value_three) {
+						if(json_is_string(value_three)) {
+							if(!strcmp("mining.notify", json_string_value(value_three))) {
+								notify = json_array_get(value_two, index_three + 1);
+								context->session_id = strdup(json_string_value(notify));
+								break;
+							}
+						}
+					}
+				}
 			}
 		}
 	}
-	if(!context->session_id) exit(1);
-
+	if(!context->session_id) {
+		printf("Session_id not found\n");
+		exit(1);
+	}
 	/* Getting the extranonce1 size */
 	context->nonce1_size = strlen(json_string_value(json_array_get(result, 1)))/2;
 
