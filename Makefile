@@ -1,4 +1,4 @@
-CC=gcc
+CC=gcc -std=c11
 ASM=nasm
 
 UNAME_S := $(shell uname -s)
@@ -72,4 +72,4 @@ analisis.o: analisis.c
 	$(CC) $(CFLAGS) analisis.c
 
 nasm_sha256.o: $(NASM_SHA256)
-	$(ASM) $(ASMFLAGS) $(NASM_SHA256)
+	$(ASM) $(ASMFLAGS) $(NASM_SHA256) -o nasm_sha256.o
