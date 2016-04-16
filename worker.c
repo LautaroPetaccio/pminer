@@ -41,26 +41,14 @@ void *worker_thread(void *arg) {
 			elapsed_seconds = 0;
 			begin = clock();
 		}
-		pthread_mutex_lock(&worker_data->stats_mutex);
-		if(worker_data->stats.running == KILL) {
-			printf("Thread %d has been signaled to die \n", worker_data->thr_id);
-			pthread_mutex_unlock(&worker_data->stats_mutex);
-			break;
-		}
-		else if(worker_data->stats.running == RESET) {
+		if(worker_data->stats.running == RESET || work.data[NONCE] >= end_nonce) {
 			worker_data->stats.running = RUN;
 			printf("Thread %d generating new work \n", worker_data->thr_id);
 			stratum_generate_new_work(worker_data->context, &work);
-			// work.data[19] = 0xffffffffU / worker_data->thr_ammount * worker_data->thr_id;
 			work.data[19] = 0;
 		}
-		pthread_mutex_unlock(&worker_data->stats_mutex);
-		if(work.data[NONCE] >= end_nonce) {
-			printf("Se lleno la nonce!\n");
-			stratum_generate_new_work(worker_data->context, &work);
-		}
 		// sha256d_scan(fst_state, hash_result, work.data, w);
-		asm_sha256d_scan(fst_state, hash_result, work.data, w);
+		asm_sha256d_scan(fst_state, hash_result, work.data);
 		if(hash_result[7] < work.target[7]) {
 			printf("Share found, queueing for send \n");
 			if(fulltest(hash_result, work.target))
@@ -70,10 +58,8 @@ void *worker_thread(void *arg) {
 		++hashes_done;
 	}
 	printf("Killing process %d \n", worker_data->thr_id);
-	// if(work.job_id)
-	// 	free(work.job_id);
-	// if(work.coinbase)
-	// 	free(work.coinbase);
+	if(work.job_id)
+		free(work.job_id);
 	pthread_exit(NULL);
 	return NULL;
 }
