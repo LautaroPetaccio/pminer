@@ -1,5 +1,6 @@
 #ifndef _PROTOCOL_H
 #define _PROTOCOL_H
+#define h_addr h_addr_list[0]
 
 #include <stdio.h>
 #include <jansson.h>

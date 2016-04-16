@@ -395,7 +395,7 @@ lea rsi, [r12 + r15]
 ; bytes_hashed += bytes_left;
 add r15, r14
 mov rdx, r14
-call _memcpy
+call memcpy
 
 lea rdi, [rbx + ctx_data_offset(0) + r14]
 ; Add bytes left
@@ -403,7 +403,7 @@ lea rdi, [rbx + ctx_data_offset(0) + r14]
 lea rsi, [rel padding]
 mov rdx, 56d
 sub rdx, r14
-call _memcpy
+call memcpy
 lea rdi, [rbx + ctx_data_offset(0) + 56]
 ; be_bit_length
 mov rax, r15
@@ -413,10 +413,10 @@ bswap rax
 mov [rbp - 8], rax
 lea rsi, [rbp-8]
 mov rdx, 8d
-call _memcpy
+call memcpy
 
 mov rdi, rbx
-call _asm_sha256_transform
+call asm_sha256_transform
 jmp .hashedCicle
 
 .bytesLeftBetween57And64:
@@ -428,30 +428,30 @@ lea rsi, [r12 + r15]
 ; bytes_hashed += bytes_left;
 add r15, r14
 mov rdx, r14
-call _memcpy
+call memcpy
 
 lea rdi, [rbx + ctx_data_offset(0) + r14]
 lea rsi, [rel padding]
 mov rdx, 64d
 sub rdx, r14
-call _memcpy
+call memcpy
 
 mov rdi, rbx
-call _asm_sha256_transform
+call asm_sha256_transform
 
 cmp r14, 64d
 je .justPadd
 lea rdi, [rbx + ctx_data_offset(0)]
 mov rsi, 0d
 mov rdx, 56d
-call _memset
+call memset
 jmp .writeLength
 
 .justPadd:
 lea rdi, [rbx + ctx_data_offset(0)]
 lea rsi, [rel padding]
 mov rdx, 56d
-call _memcpy
+call memcpy
 
 .writeLength:
 lea rdi, [rbx + ctx_data_offset(0) + 56]
@@ -463,10 +463,10 @@ bswap rax
 mov [rbp - 8], rax
 lea rsi, [rbp-8]
 mov rdx, 8d
-call _memcpy
+call memcpy
 
 mov rdi, rbx
-call _asm_sha256_transform
+call asm_sha256_transform
 jmp .hashedCicle
 
 .bytesLeftGreaterThan64:
@@ -476,10 +476,10 @@ lea rsi, [r12 + r15]
 ; bytes_hashed += bytes_left;
 add r15, 64d
 mov rdx, 64d
-call _memcpy
+call memcpy
 
 mov rdi, rbx
-call _asm_sha256_transform
+call asm_sha256_transform
 jmp .hashedCicle
 
 .end:
@@ -520,19 +520,19 @@ mov r12, rsi
 mov r13, rdx
 
 lea rdi, [rbp - SHA256_CTX_LENGTH]
-call _asm_sha256_init
+call asm_sha256_init
 
 ; sha256_ctx *context, const uint8_t *data, const size_t length
 lea rdi, [rbp - SHA256_CTX_LENGTH]
 mov rsi, rbx
 mov rdx, r12
-call _asm_sha256
+call asm_sha256
 
-; Call _bin2hex
+; Call bin2hex
 mov rdi, r13
 lea rsi, [rbp - SHA256_CTX_LENGTH]
 mov rdx, SHA256_LENGTH
-call _bin2hex
+call bin2hex
 
 add rsp, SHA256_CTX_LENGTH + 8
 pop r13
@@ -549,23 +549,23 @@ push r13
 mov rbx, rdi
 mov r12, rsi
 mov r13, rdx
-call _asm_sha256_init
+call asm_sha256_init
 ; Calls transform
 mov rdi, rbx
 mov rsi, r13
-call _asm_sha256_transform_scan
+call asm_sha256_transform_scan
 ; Calls transform
 mov rdi, rbx
 lea rsi, [r13 + 64]
-call _asm_sha256_transform_scan
+call asm_sha256_transform_scan
 
 ; Inicializing the second state
 mov rdi, r12
-call _asm_sha256_init
+call asm_sha256_init
 ; Convert 32 bytes of data to little endian
 mov rdi, r12
 mov rsi, rbx
-call _asm_sha256_transform_scan
+call asm_sha256_transform_scan
 ; Converts to little endian the resulting hash
 movdqu xmm0, [r12]
 movdqu xmm1, [r12 + 16]
@@ -578,7 +578,7 @@ pop r12
 pop rbx
 ret
 
-; _asm_sha256_transform_scan(uint32_t *state, const uint32_t *data)
+; asm_sha256_transform_scan(uint32_t *state, const uint32_t *data)
 asm_sha256_transform_scan:
 push rbp
 mov rbp, rsp
