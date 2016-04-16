@@ -64,23 +64,23 @@ void *worker_thread(void *arg) {
 	return NULL;
 }
 
-void reset_threads(struct worker_data *worker_data, unsigned int thr_ammount) {
-	for (int i = 0; i < thr_ammount; ++i) {
+void reset_threads(struct worker_data *worker_data, uint32_t thr_ammount) {
+	for (uint32_t i = 0; i < thr_ammount; ++i) {
 		pthread_mutex_lock(&worker_data[i].stats_mutex);
 		worker_data[i].stats.running = RESET;
 		pthread_mutex_unlock(&worker_data[i].stats_mutex);
 	}
 }
 
-void kill_threads(pthread_t *thr, struct worker_data *worker_data, unsigned int thr_ammount) {
+void kill_threads(pthread_t *thr, struct worker_data *worker_data, uint32_t thr_ammount) {
 	/* Tell the threads to die */
-	for (int i = 0; i < thr_ammount; ++i) {
+	for (uint32_t i = 0; i < thr_ammount; ++i) {
 		pthread_mutex_lock(&(worker_data[i].stats_mutex));
 		worker_data[i].stats.running = KILL;
 		pthread_mutex_unlock(&(worker_data[i].stats_mutex));
 	}
 	/* block until all threads complete */
-	for (int i = 0; i < thr_ammount; ++i) {
+	for (uint32_t i = 0; i < thr_ammount; ++i) {
 		pthread_join(thr[i], NULL);
 	}
 	free(thr);
@@ -89,11 +89,11 @@ void kill_threads(pthread_t *thr, struct worker_data *worker_data, unsigned int 
 
 bool create_threads(pthread_t **thr, struct worker_data **worker_data, 
 	struct stratum_connection *connection, 
-	struct stratum_context *context, unsigned int thr_ammount) {
+	struct stratum_context *context, uint32_t thr_ammount) {
 	int rc;
 	(*thr) = malloc(sizeof(pthread_t) * thr_ammount);
 	(*worker_data) = malloc(sizeof(struct worker_data) * thr_ammount);
-	for (int i = 0; i < thr_ammount; ++i) {
+	for (uint32_t i = 0; i < thr_ammount; ++i) {
 		(*worker_data)[i].thr_id = i;
 		(*worker_data)[i].stats.running = RESET;
 		(*worker_data)[i].thr_ammount = thr_ammount;

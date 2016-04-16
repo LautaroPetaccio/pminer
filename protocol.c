@@ -127,7 +127,7 @@ void destruct_stratum_context(struct stratum_context *context) {
 	if(context->nonce1) free(context->nonce1);
 	if(context->job.coinbase) free(context->job.coinbase);
 	if(context->job.job_id) free(context->job.job_id);
-	for (int i = 0; i < context->job.merkle_count; i++)
+	for (size_t i = 0; i < context->job.merkle_count; i++)
 		free(context->job.merkle[i]);
 	if(context->job.merkle) free(context->job.merkle);
 	free(context);
@@ -169,7 +169,7 @@ void stratum_generate_new_work(struct stratum_context *context, struct work* wor
 
 	/* Generates merkle root */
 	sha256d(context->job.coinbase, context->job.coinbase_size, merkle_root);
-	for(int i = 0; i < context->job.merkle_count; i++) {
+	for(size_t i = 0; i < context->job.merkle_count; i++) {
 		memcpy(merkle_root + 32, context->job.merkle[i], 32);
 		sha256d(merkle_root, 64, merkle_root);
 	}
@@ -412,7 +412,7 @@ void stratum_notify(struct stratum_context *context, json_t *json_obj) {
 	////////////////////////////////////////////////
 
 	/* Deletes old merkle hashes */
-	for (int i = 0; i < context->job.merkle_count; i++)
+	for (size_t i = 0; i < context->job.merkle_count; i++)
 		free(context->job.merkle[i]);
 	/* Stores hashes used to compute the merkle root */
 	json_t *merkle_branch = json_array_get(params, 4);
@@ -421,7 +421,7 @@ void stratum_notify(struct stratum_context *context, json_t *json_obj) {
 	context->job.merkle = realloc(context->job.merkle, 
 		context->job.merkle_count * sizeof(unsigned char *));
 	/* For each merkle hash, store the hashes */
-	for(int i=0;i < context->job.merkle_count; i++) {
+	for(size_t i=0;i < context->job.merkle_count; i++) {
 		context->job.merkle[i] = malloc(sizeof(unsigned char) * 32);
 		json_t *merkle_hash = json_array_get(merkle_branch, i);
 		hex2bin(context->job.merkle[i], json_string_value(merkle_hash), 32);

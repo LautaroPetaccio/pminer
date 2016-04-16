@@ -105,7 +105,7 @@ static void sha256_transform(sha256_ctx *ctx) {
 static void sha256_transform_scan(uint32_t *state, const uint32_t *data, uint32_t *w, uint32_t variable_data_size) {
 	/* Copies data (16 32bits uint) */
 	memcpy(w + (variable_data_size/4), data + (variable_data_size/4), 64 - variable_data_size);
-	for(int i = 0; i < (variable_data_size/4); ++i) {
+	for(uint32_t i = 0; i < (variable_data_size/4); ++i) {
 		w[i] = swap_uint32(data[i]);
 	}
 

@@ -2,7 +2,7 @@
 
 void print_queue_buffer(connection_buffer *cb) {
 	printf("Queue dump \n");
-	for (size_t i = 0; i < (cb->buffer_end_pointer - cb->buffer); ++i){
+	for (size_t i = 0; i < (size_t) (cb->buffer_end_pointer - cb->buffer); ++i){
 		printf("%c", cb->buffer[i]);
 	}
 	printf("\n");
