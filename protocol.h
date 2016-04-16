@@ -13,33 +13,13 @@
 #include <netinet/in.h>
 #include <pthread.h>
 #include <netdb.h>
+#include "work.h"
+#include "worker.h"
 #include "queue.h"
 #include "sha256.h"
 #include "util.h"
 
 typedef enum {SUBS_SENT, AUTH_SENT, AUTHORIZED} stratum_state;
-
-typedef struct block_header {
-        unsigned int    version;
-        uint32_t prev_block[8];
-        uint32_t merkle_root[8];
-        unsigned int    timestamp;
-        unsigned int    bits;
-        unsigned int    nonce;
-        uint32_t padding[12];
-} block_header;
- 
-
-struct work {
-	uint32_t data[32];
-	uint32_t target[8];
-	block_header block_header;
-
-	char *job_id;
-
-	size_t nonce2_size;
-	unsigned char *nonce2;
-};
 
 struct stratum_job {
 	char *job_id;
@@ -70,8 +50,6 @@ struct stratum_context {
 	char *user;
 	unsigned int send_id;
 	double next_diff;
-	// char *subscription_id;
-	// char *notification_id;
 	char *session_id;
 	size_t nonce1_size;
 	unsigned char *nonce1;
@@ -98,9 +76,6 @@ void stratum_client_version(struct stratum_connection *connection, json_t *json_
 void stratum_load_subscription(struct stratum_context *context, json_t *json_message);
 void stratum_notify(struct stratum_context *context, json_t *json_obj);
 void stratum_set_next_job_difficulty(struct stratum_context *context, json_t *json_message);
-
-/* Work generators */
-void stratum_generate_new_work(struct stratum_context *context, struct work* work);
 
 /* Stratum context */
 struct stratum_context* create_stratum_context();

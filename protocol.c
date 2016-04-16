@@ -144,61 +144,6 @@ void destruct_stratum_connection(struct stratum_connection *connection) {
 	free(connection);
 }
 
-void stratum_generate_new_work(struct stratum_context *context, struct work* work) {
-	pthread_mutex_lock(&context->context_mutex);
-	uint8_t merkle_root[64];
-	/* Copy the coinbase to the work */
-	if(work->job_id)
-		free(work->job_id);
-	work->job_id = strdup(context->job.job_id);
-	work->nonce2_size = context->nonce2_size;
-	work->nonce2 = realloc(work->nonce2, context->nonce2_size);
-	memcpy(work->nonce2, context->job.nonce2, context->nonce2_size);
-
-	////////////////////////////////////////////////
-	//       Transaction header creation          //
-	////////////////////////////////////////////////
-	/*
-	   Version         4 bytes
-	   hashPrevBlock  32 bytes
-	   hashMerkleRoot 32 bytes
-	   Time            4 bytes
-	   Bits            4 bytes
-	   Nonce           4 bytes
-	*/
-
-	/* Generates merkle root */
-	sha256d(context->job.coinbase, context->job.coinbase_size, merkle_root);
-	for(size_t i = 0; i < context->job.merkle_count; i++) {
-		memcpy(merkle_root + 32, context->job.merkle[i], 32);
-		sha256d(merkle_root, 64, merkle_root);
-	}
-	/* Increment extranonce2 to have different works */
-	/* Assemble block header */
-	memset(work->data, 0, 128);
-	/* Version */
-	work->data[0] = le32dec(context->job.version);
-	/* hashPrevBlock */
-	for(int i = 0; i < 8; i++)
-		work->data[1 + i] = le32dec((uint32_t *)context->job.prevhash + i);
-
-	/* hashMerkleRoot */
-	for(int i = 0; i < 8; i++)
-		// work->data[9 + i] = swap_uint32(*((uint32_t *) merkle_root + i));
-		work->data[9 + i] = be32dec((uint32_t *)merkle_root + i);
-
-	/* Little endian Time */
-	work->data[17] = le32dec(context->job.ntime);
-	/* Little endian Bits */
-	work->data[18] = le32dec(context->job.nbits);
-	/* work->data[19]; Nonce */
-	/* Padding data, optimizing the transform */
-	work->data[20] = 0x80000000;
-	work->data[31] = 0x00000280;
-	diff_to_target(work->target, context->job.diff);
-	pthread_mutex_unlock(&context->context_mutex);
-}
-
 /*
 	stratum_set_next_job_difficulty: gets the json object regarding to the difficulty
 	change and store it as the next difficulty for the next job.
@@ -336,8 +281,10 @@ void stratum_submit_share(struct stratum_connection *connection,
 	struct stratum_context *context,  struct work *work) {
 	uint32_t ntime, nonce;
 	char time_string[9], nonce_string[9], nonce2_string[(context->nonce2_size * 2) + 1];
-	le32enc(&ntime, work->data[17]);
-	le32enc(&nonce, work->data[19]);
+	// le32enc(&ntime, work->data[17]);
+	le32enc(&ntime, work->block_header.timestamp);
+	// le32enc(&nonce, work->data[19]);
+	le32enc(&nonce, work->block_header.nonce);
 	bin2hex(time_string, (const unsigned char *) (&ntime), 4);
 	bin2hex(nonce_string, (const unsigned char *) (&nonce), 4);
 	bin2hex(nonce2_string,(const unsigned char *) work->nonce2, work->nonce2_size);

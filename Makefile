@@ -37,7 +37,7 @@ sha256.o: sha256.h sha256.c
 sha256_tests.o: tests/sha256_tests.c
 	$(CC) $(CFLAGS) tests/sha256_tests.c -o tests/sha256_tests.o
 
-worker.o: worker.c worker.h
+worker.o: worker.c worker.h work.h
 	$(CC) $(CFLAGS) worker.h worker.c
 
 queue.o: queue.h queue.c
@@ -46,7 +46,7 @@ queue.o: queue.h queue.c
 queue_tests.o: tests/queue_tests.c
 	$(CC) $(CFLAGS) tests/queue_tests.c -o tests/queue_tests.o
 
-protocol.o: protocol.h protocol.c
+protocol.o: protocol.h protocol.c work.h
 	$(CC) $(CFLAGS) protocol.h protocol.c
 
 mining_test.o: tests/mining_test.c
@@ -55,8 +55,8 @@ mining_test.o: tests/mining_test.c
 main: main.o queue.o parser.o protocol.o sha256.o util.o worker.o nasm_sha256.o
 	$(CC) main.o parser.o protocol.o queue.o sha256.o util.o worker.o nasm_sha256.o -o main -ljansson -pthread -o main
 
-mining_test: tests/mining_test.o sha256.o util.o nasm_sha256.o protocol.o queue.o
-	$(CC) -lcmocka -ljansson sha256.o util.o nasm_sha256.o protocol.o queue.o tests/mining_test.o -o tests/mining_test
+mining_test: tests/mining_test.o sha256.o util.o nasm_sha256.o protocol.o queue.o worker.o
+	$(CC) -lcmocka -ljansson sha256.o util.o nasm_sha256.o protocol.o queue.o worker.o tests/mining_test.o -o tests/mining_test
 
 sha256_tests: tests/sha256_tests.o sha256.o util.o nasm_sha256.o
 	$(CC) -lcmocka -lcrypto sha256.o util.o nasm_sha256.o tests/sha256_tests.o -o tests/sha256_tests

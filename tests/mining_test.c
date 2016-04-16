@@ -10,6 +10,7 @@
 #include "../sha256.h"
 #include "../util.h"
 #include "../protocol.h"
+#include "../worker.h"
 
 // extern void* _test_malloc(const size_t size, const char* file, const int line);
 // extern void* _test_calloc(const size_t number_of_elements, const size_t size,
@@ -72,47 +73,41 @@ static void coinbase_build_test(void **state) {
 static void block_hash_test(void **state) {
 	/* Test block https://blockexplorer.com/block/00000000000000001e8d6829a8a21adc5d38d0a473b144b6765798e61f98bd1d */
 	(void) state; /* unused */
-	struct work test_work;
-	memset(&test_work, 0, sizeof(struct work));
+	struct work *test_work = create_work();
 	/* prev_hash */
 	char *prev_hash = "81cd02ab7e569e8bcd9317e2fe99f2de44d49ab2b8851ba4a308000000000000";
 	char prevhash_bin[32];
 	hex2bin((uint8_t*) prevhash_bin, prev_hash, strlen(prev_hash));
-	// byte_swap((uint8_t*) prevhash_bin, 32);
 	/* merkle_root */
 	char *merkle_root = "2b12fcf1b09288fcaff797d71e950e71ae42b91e8bdb2304758dfcffc2b620e3";
 	char merkle_bin[32];
 	hex2bin((uint8_t*) merkle_bin, merkle_root, strlen(merkle_root));
 
 	byte_swap((uint8_t*) merkle_bin, 32);
-	test_work.data[0] = 1;
-	memcpy(test_work.data + 1, prevhash_bin, 32);
-	memcpy(test_work.data + 9, merkle_bin, 32);
+	test_work->block_header.version = 1;
+	memcpy(test_work->block_header.prev_block, prevhash_bin, 32);
+	memcpy(test_work->block_header.merkle_root, merkle_bin, 32);
 	/* Little endian Time */
-	test_work.data[17] = 0x4DD7F5C7;
+	test_work->block_header.timestamp = 0x4DD7F5C7;
 	/* Little endian Bits */
-	test_work.data[18] = 0x1a44b9f2;
+	test_work->block_header.bits = 0x1a44b9f2;
 	/* Nonce */
-	test_work.data[19] = 2504433986;
-	/* Padding data, optimizing the transform */
-	test_work.data[20] = 0x80000000;
-	test_work.data[31] = 0x00000280;
+	test_work->block_header.nonce = 2504433986;
 
 	char res_hash[65];
 	uint8_t binary_hash[32];
-	sha256d((uint8_t *) test_work.data, 80, binary_hash);
+	sha256d((uint8_t *) &test_work->block_header, 80, binary_hash);
 	byte_swap(binary_hash, 32);
 	bin2hex(res_hash, binary_hash, 32);
 	assert_string_equal(res_hash, "00000000000000001e8d6829a8a21adc5d38d0a473b144b6765798e61f98bd1d");
+	destruct_work(test_work);
 }
 static void mine_test2(void **state) {
 	(void) state; /* unused */
 	/* Test init */
 	struct stratum_context *context = create_stratum_context();
-	struct work test_work;
 	json_t *json_obj = NULL;
-	test_work.job_id = NULL;
-	test_work.nonce2 = NULL;
+	struct work *test_work = create_work();
 	uint32_t fst_state[16];
 	uint32_t res_hash_bin[8];
 	char res_hash_hex[65];
@@ -134,9 +129,9 @@ static void mine_test2(void **state) {
 	json_decref(json_obj);
 
 	/* Generates work */
-	stratum_generate_new_work(context, &test_work);
+	generate_new_work(context, test_work);
 	/* Setts the nonce that results in a hash lower than the target */
-	test_work.data[19] = 0x431e3e53;
+	test_work->block_header.nonce = 0x431e3e53;
 
 	/* Getting the hash */
 	/* Preparing the padding */
@@ -145,14 +140,16 @@ static void mine_test2(void **state) {
 	fst_state[15] = 0x00000100;
 
 	/* Hashing */
-	sha256d_scan(fst_state, res_hash_bin, test_work.data, lw);
+	// sha256d_scan(fst_state, res_hash_bin, test_work.data, lw);
+	sha256d_scan(fst_state, res_hash_bin, (uint32_t *) &test_work->block_header, lw);
 
 	/* Checks if fulltest works */
-	assert_true(fulltest(res_hash_bin, test_work.target));
+	assert_true(fulltest(res_hash_bin, test_work->target));
 	/* Asserting with the hex hash */
 	byte_swap((uint8_t *) res_hash_bin, 32);
 	bin2hex(res_hash_hex, (uint8_t*) res_hash_bin, 32);
 	assert_string_equal(res_hash_hex, "00000000082f5e75206d5606248a09538e6ca5df4eedac20e8682b7832953ff8");
+	destruct_work(test_work);
 	destruct_stratum_context(context);
 
 
