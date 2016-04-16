@@ -3,12 +3,12 @@ ASM=nasm
 
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Linux)
-    CFLAGS=-c -Wall -O2 -g
+    CFLAGS=-c -Wall -Wextra -Wpedantic -O2 -g
     ASMFLAGS=-f elf64
     NASM_SHA256 = nasm_sha256_linux.asm
 endif
 ifeq ($(UNAME_S),Darwin)
-    CFLAGS=-c -Wall -I/usr/local/include -g
+    CFLAGS=-c -Wall -O2 -g -Wextra -Wpedantic -I/usr/local/include -g
     ASMFLAGS=-f macho64
     CC +=-L/usr/local/lib
     NASM_SHA256 = nasm_sha256.asm
