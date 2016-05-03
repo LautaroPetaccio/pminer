@@ -46,6 +46,7 @@ void generate_new_work(struct stratum_context *context, struct work* work) {
 		sha256d(merkle_root, 64, merkle_root);
 	}
 	/* Increment extranonce2 to have different works */
+	for (size_t i = 0; i < context->nonce2_size && !++context->job.nonce2[i]; i++);
 
 	/* Fills block header */
 
