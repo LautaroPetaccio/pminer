@@ -102,12 +102,9 @@ static void sha256_transform(sha256_ctx *ctx) {
 
 }
 
-static void sha256_transform_scan(uint32_t *state, const uint32_t *data, uint32_t *w, uint32_t variable_data_size) {
+static void sha256_transform_scan(uint32_t *state, const uint32_t *data, uint32_t *w) {
 	/* Copies data (16 32bits uint) */
-	memcpy(w + (variable_data_size/4), data + (variable_data_size/4), 64 - variable_data_size);
-	for(uint32_t i = 0; i < (variable_data_size/4); ++i) {
-		w[i] = swap_uint32(data[i]);
-	}
+	memcpy(w, data, 64);
 
 	/* Extends w */
 	for(int i = 16; i < 64; ++i) {
@@ -251,11 +248,11 @@ void sha256_hash(const uint8_t *data, const size_t length, char *hash) {
 void sha256d_scan(uint32_t *fst_state, uint32_t *snd_state, const uint32_t *data, uint32_t *lw) {
 	/* First hash */
 	sha256_init_scan(fst_state);
-	sha256_transform_scan(fst_state, data, lw, 0);
-	sha256_transform_scan(fst_state, data + 16, lw, 0);
+	sha256_transform_scan(fst_state, data, lw);
+	sha256_transform_scan(fst_state, data + 16, lw);
 	/* Second hash */
 	sha256_init_scan(snd_state);
-	sha256_transform_scan(snd_state, fst_state, lw, 0);
+	sha256_transform_scan(snd_state, fst_state, lw);
 	/* Converts result to big endian */
 	for (int i = 0; i < 8; ++i) {
 		snd_state[i] = swap_uint32(snd_state[i]);
