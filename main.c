@@ -10,13 +10,8 @@
 #include "queue.h"
 #include "protocol.h"
 #include "worker.h"
+#include "sender.h"
 
-pthread_t *thr = NULL;
-unsigned int threads_ammount = 4;
-struct worker_data* worker_data = NULL;
-bool run = true;
-unsigned int correct_shares = 0;
-unsigned int incorrect_shares = 0;
 // struct worker_data* thr_data;
 
 // void sig_handler(int signo) {
@@ -27,6 +22,13 @@ unsigned int incorrect_shares = 0;
 // }
 
 int main(int argc, char **argv) {
+  pthread_t *thr = NULL;
+  pthread_t *sender_thread = NULL;
+  unsigned int threads_ammount = 4;
+  struct worker_data* worker_data = NULL;
+  bool run = true;
+  unsigned int correct_shares = 0;
+  unsigned int incorrect_shares = 0;
   /* Catch SIGINT */
   // if(signal(SIGINT, sig_handler) == SIG_ERR)
 	 //  printf("\ncan't catch SIGINT\n");
@@ -60,16 +62,24 @@ int main(int argc, char **argv) {
 
   struct stratum_context *context = create_stratum_context();
 
+  sender_thread = create_sender(connection);
+  if(!sender_thread) {
+    printf("Sender thread could not be created! \n");
+    destruct_stratum_connection(connection);
+    destruct_stratum_context(context);
+    return 0;
+  }
+
   stratum_subscribe(connection);
   stratum_authorize(connection, args.username, args.password);
 
   char *message = NULL;
   size_t message_received_size = 0;
 	while(run) {
-    if(send_messages(connection) < 0) {
-      printf("Error writing to socket exiting \n");
-      run = false;
-    }
+    // if(send_messages(connection) < 0) {
+    //   printf("Error writing to socket exiting \n");
+    //   run = false;
+    // }
     // printf("Getting messages \n");
     message_received_size = get_message(connection, &message);
     printf("Got message: \n %s \n", message);
@@ -96,7 +106,7 @@ int main(int argc, char **argv) {
 			switch(id_value) {
 				case 1:
 					if(context->state == SUBS_SENT) {
-						printf("Recieved subscription \n");
+						printf("Received subscription \n");
 						context->state = AUTH_SENT;
 						stratum_load_subscription(context, json_obj);
 					}
@@ -163,6 +173,7 @@ int main(int argc, char **argv) {
         printf("Message from the server \n %s \n", json_string_value(val));
       }
       else if(!strcmp(json_string_value(method), "client.get_version")) {
+        printf("The server asked for our version, sending it \n");
         stratum_client_version(connection, json_obj);
       }
       else if(!strcmp(json_string_value(method), "client.reconnect")) {
@@ -173,11 +184,13 @@ int main(int argc, char **argv) {
 		json_decref(json_obj);
 		free(message);
 	}
-  printf("Exiting \n");
-  if(thr) kill_threads(thr, worker_data, threads_ammount);
   destruct_stratum_connection(connection);
-  // printf("Destroyed connection \n");
   destruct_stratum_context(context);
-  // printf("Destroyed context \n");
+  if(thr)
+    free(thr);
+  if(worker_data)
+    free(worker_data);
+  if(sender_thread)
+    free(sender_thread);
   return 0;
 }

@@ -8,7 +8,7 @@ ifeq ($(UNAME_S),Linux)
     NASM_SHA256 = nasm_sha256_linux.asm
 endif
 ifeq ($(UNAME_S),Darwin)
-    CFLAGS=-c -Wall -O2 -g -Wextra -Wpedantic -I/usr/local/include -g
+    CFLAGS=-c -Wall -O1 -g -Wextra -Wpedantic -I/usr/local/include -g
     ASMFLAGS=-f macho64
     CC +=-L/usr/local/lib
     NASM_SHA256 = nasm_sha256.asm
@@ -46,14 +46,17 @@ queue.o: queue.h queue.c
 queue_tests.o: tests/queue_tests.c
 	$(CC) $(CFLAGS) tests/queue_tests.c -o tests/queue_tests.o
 
+sender.o: sender.h sender.c
+	$(CC) $(CFLAGS) sender.h sender.c
+
 protocol.o: protocol.h protocol.c work.h
 	$(CC) $(CFLAGS) protocol.h protocol.c
 
 mining_test.o: tests/mining_test.c
 	$(CC) $(CFLAGS) tests/mining_test.c -o tests/mining_test.o
 
-main: main.o queue.o parser.o protocol.o sha256.o util.o worker.o nasm_sha256.o
-	$(CC) main.o parser.o protocol.o queue.o sha256.o util.o worker.o nasm_sha256.o -o main -ljansson -pthread -o main
+main: main.o queue.o parser.o protocol.o sha256.o util.o worker.o nasm_sha256.o sender.o
+	$(CC) main.o parser.o protocol.o queue.o sha256.o util.o worker.o nasm_sha256.o sender.o -o main -ljansson -pthread -o main
 
 mining_test: tests/mining_test.o sha256.o util.o nasm_sha256.o protocol.o queue.o worker.o
 	$(CC) -lcmocka -ljansson sha256.o util.o nasm_sha256.o protocol.o queue.o worker.o tests/mining_test.o -o tests/mining_test
