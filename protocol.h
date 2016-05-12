@@ -42,6 +42,7 @@ struct stratum_connection {
 	int socket;
 	unsigned int send_id;
 	pthread_mutex_t send_queue_mutex;
+	pthread_cond_t sender_condition;
 	connection_buffer *recv_queue;
 	connection_buffer *send_queue;
 };

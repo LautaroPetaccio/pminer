@@ -65,6 +65,7 @@ struct stratum_connection* create_stratum_connection(char *ip, char *port) {
 	pthread_mutex_init(&connection->send_queue_mutex, NULL);
 	connection->send_id = 1;
 	connection->socket = socket;
+	pthread_cond_init(&connection->sender_condition, NULL);
 	return connection;
 }
 
@@ -78,17 +79,17 @@ bool add_to_send_queue(struct stratum_connection* connection, char *data, size_t
 }
 
 int send_messages(struct stratum_connection* connection) {
-	pthread_mutex_lock(&connection->send_queue_mutex);
+	// pthread_mutex_lock(&connection->send_queue_mutex);
 	size_t size_to_send = queue_used_size(connection->send_queue);
 	if(size_to_send == 0) {
-		pthread_mutex_unlock(&connection->send_queue_mutex);
+		// pthread_mutex_unlock(&connection->send_queue_mutex);
 		return 0;
 	}
 	int sent_data_size = 0;
 	sent_data_size = write(connection->socket, (void *) connection->send_queue->buffer, size_to_send);
 	if(sent_data_size < 0) {
 		fprintf(stderr, "ERROR writing to socket, wrote 0 bytes\n");
-		pthread_mutex_unlock(&connection->send_queue_mutex);
+		// pthread_mutex_unlock(&connection->send_queue_mutex);
 		return sent_data_size;
 	}
 	else {
@@ -100,7 +101,7 @@ int send_messages(struct stratum_connection* connection) {
 	}
 	if(sent_data_size > 0)
 		queue_pop_size(connection->send_queue, (size_t) sent_data_size);
-	pthread_mutex_unlock(&connection->send_queue_mutex);
+	// pthread_mutex_unlock(&connection->send_queue_mutex);
 	return sent_data_size;
 }
 
@@ -175,6 +176,7 @@ void stratum_subscribe(struct stratum_connection *connection) {
 	add_to_send_queue(connection, res_string, res_string_length + 1);
 	connection->send_id++;
 	/* Unlock send_queue */
+	pthread_cond_signal(&connection->sender_condition);
 	pthread_mutex_unlock(&connection->send_queue_mutex);
 	free(res_string);
 	json_decref(root);
@@ -191,6 +193,7 @@ void stratum_client_version(struct stratum_connection *connection, json_t *json_
 	res_string[message_len] = '\n';
 	pthread_mutex_lock(&connection->send_queue_mutex);
 	add_to_send_queue(connection, res_string, message_len + 1);
+	pthread_cond_signal(&connection->sender_condition);
 	pthread_mutex_unlock(&connection->send_queue_mutex);
 	json_decref(root);
 	free(res_string);
@@ -272,6 +275,7 @@ void stratum_authorize(struct stratum_connection *connection,
 	add_to_send_queue(connection, res_string, message_len + 1);
 	connection->send_id++;
 	/* Unlock send_queue */
+	pthread_cond_signal(&connection->sender_condition);
 	pthread_mutex_unlock(&connection->send_queue_mutex);
 	json_decref(root);
 	free(res_string);
@@ -309,6 +313,7 @@ void stratum_submit_share(struct stratum_connection *connection,
 	add_to_send_queue(connection, res_string, strlen(res_string) + 1);
 	connection->send_id++;
 	/* Unlock send_queue */
+	pthread_cond_signal(&connection->sender_condition);
 	pthread_mutex_unlock(&connection->send_queue_mutex);
 	// El incremento deberia estar en el send?
 	json_decref(root);
