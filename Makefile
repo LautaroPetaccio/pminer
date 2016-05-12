@@ -15,7 +15,7 @@ ifeq ($(UNAME_S),Darwin)
 endif
 
 
-all: main tests
+all: main
 
 tests: sha256_tests queue_tests mining_test
 
