@@ -560,13 +560,15 @@ mov rdi, rbx
 lea rsi, [r13 + 64]
 call _asm_sha256_transform_scan
 
-; Inicializing the second state
+; Initializing the second state
 mov rdi, r12
 call _asm_sha256_init
-; Convert 32 bytes of data to little endian
+
+; Calls transform
 mov rdi, r12
 mov rsi, rbx
 call _asm_sha256_transform_scan
+
 ; Converts to little endian the resulting hash
 movdqu xmm0, [r12]
 movdqu xmm1, [r12 + 16]
@@ -589,8 +591,7 @@ push r13
 push r14
 push r15
 
-; Copies 16 32bits uint and transforms them into big endian
-; lea rdi, [rel ctx_data]
+; Copies 16 32bits
 movdqu xmm0, [rsi]
 movdqu xmm1, [rsi + 16]
 movdqu xmm2, [rsi + 32]
