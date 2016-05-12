@@ -112,7 +112,7 @@ void *worker_thread(void *arg) {
 			// stratum_generate_new_work(worker_data->context, work);
 			generate_new_work(worker_data->context, work);
 		}
-		// sha256d_scan(fst_state, hash_result, work->data, w);
+		// sha256d_scan(fst_state, hash_result, (uint32_t *) &work->block_header, w);
 		asm_sha256d_scan(fst_state, hash_result, (uint32_t *) &work->block_header);
 		if(hash_result[7] < work->target[7]) {
 			printf("Share found, queueing for send \n");
